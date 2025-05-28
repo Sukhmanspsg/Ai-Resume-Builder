@@ -1,0 +1,64 @@
+
+Santiago's Development Tasks – ai-resume-builder (Backend Branch)
+=================================================================
+
+✅ GENERAL RESPONSIBILITY:
+Build all backend features related to database connection, API routes, authentication, and resume data management. Lead branch and repo setup.
+
+===============================================================
+🗂 MODULE-BY-MODULE TASK BREAKDOWN
+===============================================================
+
+🧱 1. DATABASE DESIGN
+- Design MySQL schema for:
+  • users
+  • resumes
+  • templates
+  • feedback (AI-generated suggestions)
+- Create tables in phpMyAdmin or via migration scripts
+- Test connection via MySQL + `.env`
+
+---------------------------------------------------------------
+🔐 2. USER REGISTRATION/LOGIN
+- Build Express routes:
+  • POST /register
+  • POST /login
+- Hash passwords (e.g., bcrypt)
+- Validate input
+- Return JWT on login success
+
+---------------------------------------------------------------
+🔑 3. SESSION/AUTHENTICATION
+- Use JWT (jsonwebtoken) to manage sessions
+- Create auth middleware to protect private routes
+- Decode token to identify user from frontend requests
+
+---------------------------------------------------------------
+📄 4. RESUME API ROUTES
+- POST /resumes – Create resume
+- GET /resumes – List user resumes
+- PUT /resumes/:id – Edit resume
+- DELETE /resumes/:id – Delete resume
+- Link resume to authenticated user
+
+---------------------------------------------------------------
+🤖 5. AI INTEGRATION
+(Switch to `ai-integration` branch when working here)
+- POST /ai/enhance – Send resume text to GPT/OpenAI
+- Process and store AI feedback in `feedback` table
+- Return enhanced resume data to frontend
+
+---------------------------------------------------------------
+🛠 6. SUPPORT + CONFIG
+- Maintain backend code structure
+- Document .env, MySQL setup (done)
+- Help Sukhman with backend admin/API support as needed
+
+===============================================================
+🧠 CURRENT STATUS (as of now)
+===============================================================
+✔ Server & DB connection working
+⬜ Creating tables
+⬜ Auth routes
+⬜ Resume CRUD
+⬜ AI integration (coming later)
