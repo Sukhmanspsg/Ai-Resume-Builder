@@ -32,5 +32,14 @@ router.get('/activate/:token', authController.activateAccount);
 // ===============================================
 router.post('/resend-activation', authController.resendActivationEmail);
 
+// ===============================================
+// @route   POST /api/auth/forgot-password
+// @desc    Send password reset email with token
+// @access  Public
+// ===============================================
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password/:token', authController.resetPassword);
+
+
 // Export router for use in main server file
 module.exports = router;

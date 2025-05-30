@@ -1,48 +1,136 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Tab, TabStopPosition, TabStopType } from 'docx';
+import DefaultTemplate from '../components/DefaultTemplate';
+import ReactDOMServer from 'react-dom/server';
+import { calculateATSScore } from '../utils/atsScoring';
 
 const ResumePreview = () => {
-  const { state: resume } = useLocation(); // Resume data passed via route state
+  const { state: resume } = useLocation();
   const navigate = useNavigate();
+
+  // Redirect if no resume data
+  useEffect(() => {
+    if (!resume) {
+      alert('No resume data found');
+      navigate('/editor');
+    }
+  }, [resume, navigate]);
 
   // State to store ATS score and AI suggestions
   const [atsScore, setAtsScore] = useState(null);
-  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [aiSuggestions, setAiSuggestions] = useState({
+    summary: [],
+    experience: [],
+    skills: [],
+    education: [],
+    overall: []
+  });
+  const [isAnalyzing, setIsAnalyzing] = useState(true);
+
+  // Function to analyze resume content and generate specific suggestions
+  const generateSpecificSuggestions = (resume) => {
+    const suggestions = {
+      summary: [],
+      experience: [],
+      skills: [],
+      education: [],
+      overall: []
+    };
+
+    // Analyze summary
+    if (!resume.summary || resume.summary.length < 50) {
+      suggestions.summary.push('Add a more detailed professional summary (aim for 3-4 impactful sentences)');
+    }
+    if (!resume.summary?.includes('years of experience')) {
+      suggestions.summary.push('Include your total years of experience in your summary');
+    }
+    if (!resume.summary?.match(/\d+/)) {
+      suggestions.summary.push('Add quantifiable achievements or metrics to your summary');
+    }
+
+    // Analyze work experience
+    if (resume.workExperience) {
+      resume.workExperience.forEach((exp, index) => {
+        if (!exp.responsibilities.includes('%') && !exp.responsibilities.includes('increased') && !exp.responsibilities.includes('decreased')) {
+          suggestions.experience.push(`Add quantifiable results to your role at ${exp.company} (e.g., "Increased efficiency by 25%")`);
+        }
+        if (!exp.responsibilities.match(/^(Led|Managed|Developed|Created|Implemented)/m)) {
+          suggestions.experience.push(`Start your bullet points for ${exp.company} with strong action verbs`);
+        }
+        if (exp.responsibilities.split('\n').length < 3) {
+          suggestions.experience.push(`Add more achievements for your role at ${exp.company} (aim for 3-5 bullet points)`);
+        }
+      });
+    }
+
+    // Analyze skills
+    if (!resume.skills || resume.skills.length < 8) {
+      suggestions.skills.push('Add more relevant technical and soft skills (aim for 8-12 key skills)');
+    }
+    const technicalSkills = ['programming', 'software', 'java', 'python', 'javascript', 'react', 'node', 'database', 'aws', 'cloud'];
+    const hasTechnicalSkills = resume.skills?.some(skill => 
+      technicalSkills.some(tech => skill.toLowerCase().includes(tech))
+    );
+    if (!hasTechnicalSkills) {
+      suggestions.skills.push('Include specific technical skills relevant to your field');
+    }
+    const softSkills = ['leadership', 'communication', 'teamwork', 'problem-solving', 'analytical'];
+    const hasSoftSkills = resume.skills?.some(skill => 
+      softSkills.some(soft => skill.toLowerCase().includes(soft))
+    );
+    if (!hasSoftSkills) {
+      suggestions.skills.push('Add soft skills like leadership, communication, or problem-solving');
+    }
+
+    // Analyze education
+    if (resume.education) {
+      resume.education.forEach(edu => {
+        if (!edu.year) {
+          suggestions.education.push('Add graduation year for ${edu.degree}');
+        }
+        if (!edu.degree?.includes('Bachelor') && !edu.degree?.includes('Master') && !edu.degree?.includes('PhD')) {
+          suggestions.education.push('Specify the type of degree (Bachelor\'s, Master\'s, etc.)');
+        }
+      });
+    }
+
+    // Overall recommendations
+    if (!resume.linkedin) {
+      suggestions.overall.push('Add your LinkedIn profile URL');
+    }
+    if (!resume.certifications || resume.certifications.length === 0) {
+      suggestions.overall.push('Consider adding relevant certifications to strengthen your credentials');
+    }
+    suggestions.overall.push('Ensure your resume is tailored for specific job descriptions');
+    suggestions.overall.push('Use industry-specific keywords throughout your resume');
+
+    return suggestions;
+  };
 
   useEffect(() => {
-    // Fetch ATS score for the current resume
-    const fetchATSScore = async () => {
-      try {
-        const content = JSON.stringify(resume); // Resume content in string format
-        const res = await api.post('/api/ats/ats-score', { content });
-        setAtsScore(res.data.score);
-      } catch (err) {
-        console.error('❌ ATS scoring failed', err);
-        setAtsScore('N/A');
-      }
-    };
+    const analyzeResume = async () => {
+      if (resume && Object.keys(resume).length > 0) {
+        setIsAnalyzing(true);
+        try {
+          // Calculate ATS score using the shared scoring function
+          const score = calculateATSScore(resume);
+          setAtsScore(score);
 
-    // Fetch AI suggestions for resume improvement
-    const fetchAISuggestions = async () => {
-      try {
-        const res = await api.post('/api/ai/suggestions', { resume });
-        if (res.data.suggestions) {
-          setAiSuggestions(res.data.suggestions);
-        } else {
-          setAiSuggestions(['Use more quantifiable results', 'Include relevant certifications']);
+          // Generate specific suggestions based on resume content
+          const suggestions = generateSpecificSuggestions(resume);
+          setAiSuggestions(suggestions);
+        } catch (err) {
+          console.error('❌ Resume analysis failed', err);
+          setAtsScore(null);
+        } finally {
+          setIsAnalyzing(false);
         }
-      } catch (err) {
-        console.error('❌ AI suggestions failed', err);
-        setAiSuggestions(['Use more quantifiable results', 'Include relevant certifications']);
       }
     };
 
-    // Trigger both functions if resume data exists
-    if (resume && Object.keys(resume).length > 0) {
-      fetchATSScore();
-      fetchAISuggestions();
-    }
+    analyzeResume();
   }, [resume]);
 
   // Apply AI-generated suggestions and redirect user to edit page
@@ -60,77 +148,589 @@ const ResumePreview = () => {
     }
   };
 
+  // Function to handle downloads
+  const handleDownload = async (type) => {
+    if (type === 'pdf') {
+      // Get the rendered HTML from DefaultTemplate
+      const templateHtml = ReactDOMServer.renderToString(<DefaultTemplate resume={resume} />);
+      
+      // Add print-specific styles
+      const style = document.createElement('style');
+      style.innerHTML = `
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #resume-content, #resume-content * {
+            visibility: visible;
+          }
+          #resume-content {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .no-print, .floating-help-icon {
+            display: none !important;
+          }
+          @page {
+            margin: 0;
+            size: A4;
+          }
+          body {
+            font-family: Arial, sans-serif;
+          }
+          /* Ensure colors print correctly */
+          #resume-content .bg-[#1A237E] {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background-color: #1A237E !important;
+            color: white !important;
+          }
+          #resume-content .text-[#1A237E] {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color: #1A237E !important;
+          }
+          #resume-content .border-[#1A237E] {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            border-color: #1A237E !important;
+          }
+        }
+      `;
+      
+      // Create a temporary container for the template
+      const container = document.createElement('div');
+      container.innerHTML = templateHtml;
+      container.id = 'resume-content';
+      document.body.appendChild(container);
+      document.head.appendChild(style);
+      
+      // Print
+      window.print();
+      
+      // Cleanup
+      document.body.removeChild(container);
+      document.head.removeChild(style);
+    } else if (type === 'word') {
+      // Define consistent styles matching the preview exactly
+      const styles = {
+        headerBackground: {
+          size: 32,
+          bold: true,
+          color: "FFFFFF", // White text
+          spacing: { after: 300 }
+        },
+        headerContactWhite: {
+          size: 20,
+          color: "FFFFFF", // White text
+          spacing: { after: 100 }
+        },
+        sectionTitle: {
+          size: 24,
+          bold: true,
+          color: "1A237E",
+          spacing: { before: 400, after: 200 },
+          border: {
+            bottom: {
+              color: "1A237E",
+              style: BorderStyle.SINGLE,
+              size: 1,
+            },
+          }
+        },
+        jobTitle: {
+          size: 22,
+          bold: true,
+          color: "1A237E"
+        },
+        companyName: {
+          size: 20,
+          color: "1A237E"
+        },
+        duration: {
+          size: 20,
+          color: "666666",
+          italics: true
+        },
+        bulletPoint: {
+          size: 20,
+          color: "666666",
+          spacing: { after: 100 }
+        },
+        skillTag: {
+          size: 18,
+          color: "666666"
+        }
+      };
+
+      const sections = [
+        // Header background paragraph
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "",
+            })
+          ],
+          shading: {
+            fill: "1A237E", // Blue background
+            color: "1A237E",
+            val: "clear"
+          },
+          spacing: { before: 0 }
+        }),
+
+        // Header with name (centered)
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: resume.name,
+              ...styles.headerBackground,
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+          shading: {
+            fill: "1A237E", // Blue background
+            color: "1A237E",
+            val: "clear"
+          }
+        }),
+
+        // Contact info (centered)
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({
+              text: `${resume.email} | ${resume.contact}`,
+              ...styles.headerContactWhite
+            }),
+          ],
+          spacing: { after: 200 },
+          shading: {
+            fill: "1A237E", // Blue background
+            color: "1A237E",
+            val: "clear"
+          }
+        }),
+
+        // LinkedIn (centered)
+        resume.linkedin ? new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({
+              text: resume.linkedin,
+              ...styles.headerContactWhite,
+              underline: {}
+            })
+          ],
+          spacing: { after: 400 },
+          shading: {
+            fill: "1A237E", // Blue background
+            color: "1A237E",
+            val: "clear"
+          }
+        }) : null,
+
+        // Professional Summary
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "Professional Summary",
+              ...styles.sectionTitle
+            })
+          ],
+          spacing: { after: 200 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: resume.summary,
+              ...styles.bulletPoint
+            })
+          ],
+          spacing: { after: 400 }
+        }),
+
+        // Work Experience
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "Work Experience",
+              ...styles.sectionTitle
+            })
+          ],
+          spacing: { after: 200 }
+        }),
+        ...resume.workExperience.flatMap(exp => [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: exp.title,
+                ...styles.jobTitle
+              }),
+              new TextRun({
+                text: "\t",
+                children: [new Tab()]
+              }),
+              new TextRun({
+                text: exp.duration,
+                ...styles.duration
+              })
+            ],
+            tabStops: [
+              {
+                type: TabStopType.RIGHT,
+                position: TabStopPosition.MAX
+              }
+            ],
+            spacing: { after: 100 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: exp.company,
+                ...styles.companyName
+              })
+            ],
+            spacing: { after: 200 }
+          }),
+          ...exp.responsibilities.split('\n').map(resp =>
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "• ",
+                  ...styles.bulletPoint,
+                  bold: true
+                }),
+                new TextRun({
+                  text: resp.trim(),
+                  ...styles.bulletPoint
+                })
+              ],
+              indent: {
+                left: 360 // 0.25 inch indent for bullets
+              },
+              spacing: { after: 100 }
+            })
+          )
+        ]),
+
+        // Education
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "Education",
+              ...styles.sectionTitle
+            })
+          ],
+          spacing: { after: 200 }
+        }),
+        ...resume.education.map(edu => [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: edu.degree,
+                ...styles.jobTitle
+              }),
+              new TextRun({
+                text: "\t",
+                children: [new Tab()]
+              }),
+              new TextRun({
+                text: edu.year,
+                ...styles.duration
+              })
+            ],
+            tabStops: [
+              {
+                type: TabStopType.RIGHT,
+                position: TabStopPosition.MAX
+              }
+            ],
+            spacing: { after: 100 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: edu.university,
+                ...styles.companyName
+              })
+            ],
+            spacing: { after: 200 }
+          })
+        ]).flat(),
+
+        // Skills
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "Skills",
+              ...styles.sectionTitle
+            })
+          ],
+          spacing: { after: 200 }
+        }),
+        new Paragraph({
+          children: resume.skills.map((skill, index) => [
+            new TextRun({
+              text: skill,
+              ...styles.skillTag
+            }),
+            new TextRun({
+              text: index < resume.skills.length - 1 ? " • " : "",
+              ...styles.skillTag,
+              bold: true
+            })
+          ]).flat(),
+          spacing: { after: 400 }
+        })
+      ];
+
+      // Add Certifications if any
+      if (resume.certifications?.length > 0) {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Certifications",
+                ...styles.sectionTitle
+              })
+            ],
+            spacing: { after: 200 }
+          }),
+          ...resume.certifications.map(cert =>
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "• ",
+                  ...styles.bulletPoint,
+                  bold: true
+                }),
+                new TextRun({
+                  text: cert,
+                  ...styles.bulletPoint
+                })
+              ],
+              indent: {
+                left: 360
+              },
+              spacing: { after: 100 }
+            })
+          )
+        );
+      }
+
+      // Add References if any
+      if (resume.references) {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "References",
+                ...styles.sectionTitle
+              })
+            ],
+            spacing: { after: 200 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: resume.references,
+                ...styles.bulletPoint
+              })
+            ],
+            spacing: { after: 200 }
+          })
+        );
+      }
+
+      // Create and download the Word document
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: {
+              margin: {
+                top: 1440, // 1 inch
+                right: 1440,
+                bottom: 1440,
+                left: 1440
+              }
+            }
+          },
+          children: sections.filter(Boolean)
+        }]
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${resume.name.replace(/\s+/g, '_')}_resume.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const renderSuggestionSection = (title, suggestions, icon) => (
+    <div className="mb-6">
+      <div className="flex items-center mb-3">
+        {icon}
+        <h3 className="text-lg font-semibold text-gray-900 ml-2">{title}</h3>
+      </div>
+      <ul className="space-y-2">
+        {suggestions.map((suggestion, index) => (
+          <li key={index} className="flex items-start space-x-2 text-gray-700">
+            <span className="text-green-500 mt-1">•</span>
+            <span>{suggestion}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
+  if (!resume) {
+    return <div>Loading...</div>;
+  }
+
   return (
-    <div className="container mt-5">
-      <h2>Resume Preview</h2>
-
-      {/* Resume Details Box */}
-      <div className="border p-4 rounded bg-white">
-        <h6><strong>{resume.name}</strong></h6>
-        <p>{resume.contact}</p>
-        <p>
-          <a href={resume.linkedin} target="_blank" rel="noopener noreferrer">
-            {resume.linkedin}
-          </a>
-        </p>
-        <p><em>{resume.summary}</em></p>
-
-        <h6><strong>Work Experience:</strong></h6>
-        <p>{resume.jobTitle} at {resume.company} ({resume.duration})</p>
-        <p>{resume.responsibilities}</p>
-
-        <h6><strong>Education:</strong></h6>
-        <p>{resume.degree} — {resume.university} ({resume.year})</p>
-
-        <h6><strong>Skills:</strong></h6>
-        <p>{Array.isArray(resume.skills) ? resume.skills.join(', ') : resume.skills}</p>
-
-        <h6><strong>Certifications:</strong></h6>
-        <p>{Array.isArray(resume.certifications) ? resume.certifications.join(', ') : resume.certifications}</p>
-
-        <h6><strong>References:</strong></h6>
-        <p>{resume.references}</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header with title and actions - now in black */}
+      <div className="bg-black text-white py-4 px-8 mb-8">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
+          <h2 className="text-2xl font-bold">Resume Preview</h2>
+          <div className="flex space-x-4">
+            <button
+              onClick={() => navigate('/editor', { state: resume })}
+              className="px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-100 transition-colors font-medium"
+            >
+              Edit Resume
+            </button>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handleDownload('pdf')}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium flex items-center"
+              >
+                <span className="mr-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586L7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                PDF
+              </button>
+              <button
+                onClick={() => handleDownload('word')}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium flex items-center"
+              >
+                <span className="mr-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                Word
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* AI Feedback Section */}
-      <div className="mt-4">
-        <h6>
-          Your resume is missing this (<span className="text-primary">AI Suggestion</span>)
-        </h6>
+      {/* Resume Content */}
+      <div className="py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Resume Preview Section */}
+          <div className="bg-white shadow-lg rounded-lg overflow-hidden mb-8">
+            {/* Resume Content using DefaultTemplate */}
+            <div id="resume-content">
+              <DefaultTemplate resume={resume} />
+            </div>
+          </div>
 
-        <div className="border p-3 rounded bg-light">
-          <p>Add this to improve your resume:</p>
-          <ul>
-            {aiSuggestions.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
-        </div>
+          {/* Enhanced AI Feedback Section */}
+          <div className="bg-white shadow-lg rounded-lg overflow-hidden no-print">
+            <div className="p-6 border-b border-gray-200 bg-black text-white">
+              <h2 className="text-xl font-bold">AI Resume Analysis</h2>
+            </div>
+            
+            <div className="p-6">
+              {isAnalyzing ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+                  <span className="ml-3">Analyzing your resume...</span>
+                </div>
+              ) : (
+                <>
+                  {/* ATS Score */}
+                  <div className="mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">ATS Compatibility Score</h3>
+                    <div className="flex items-center space-x-4">
+                      <div className="flex-1 bg-gray-200 rounded-full h-4">
+                        <div
+                          className="bg-green-500 rounded-full h-4 transition-all duration-300"
+                          style={{ width: `${atsScore || 0}%` }}
+                        />
+                      </div>
+                      <span className="text-xl font-medium text-green-600">
+                        {atsScore !== null ? `${atsScore}%` : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
 
-        {/* Action Buttons */}
-        <button
-          className="btn btn-secondary mt-3"
-          onClick={() => navigate('/CoverLetter', { state: resume })}
-        >
-          Continue with this Resume
-        </button>
+                  {/* Detailed Suggestions */}
+                  <div className="space-y-6">
+                    {renderSuggestionSection("Professional Summary Improvements", aiSuggestions.summary, 
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    )}
 
-        <button
-          className="btn btn-primary mt-3 ms-3"
-          onClick={applyAISuggestions}
-        >
-          Apply AI Improvements
-        </button>
+                    {renderSuggestionSection("Work Experience Enhancements", aiSuggestions.experience,
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    )}
 
-        {/* AI Feedback Summary */}
-        <div className="mt-3">
-          <small>
-            <strong>AI Suggestions:</strong><br />
-            {aiSuggestions[0]}
-          </small><br />
-          <small>
-            <strong>ATS Score:</strong> {atsScore !== null ? `${atsScore}%` : 'Loading...'}
-          </small>
+                    {renderSuggestionSection("Skills Recommendations", aiSuggestions.skills,
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                    )}
+
+                    {renderSuggestionSection("Education Improvements", aiSuggestions.education,
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path d="M12 14l9-5-9-5-9 5 9 5z" />
+                        <path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                      </svg>
+                    )}
+
+                    {renderSuggestionSection("Overall Recommendations", aiSuggestions.overall,
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex space-x-4 mt-8">
+                    <button
+                      onClick={applyAISuggestions}
+                      className="flex-1 px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90 transition-colors font-medium"
+                    >
+                      Apply AI Improvements
+                    </button>
+                    <button
+                      onClick={() => navigate('/cover-letter', { state: resume })}
+                      className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
+                    >
+                      Create Cover Letter
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

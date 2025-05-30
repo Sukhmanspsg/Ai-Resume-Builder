@@ -33,4 +33,21 @@ const sendActivationEmail = (email, token) => {
   return transporter.sendMail(mailOptions);
 };
 
-module.exports = { sendActivationEmail };
+// ✅ NEW: Password reset email function
+const sendPasswordResetEmail = (email, token) => {
+  const resetUrl = `http://localhost:3000/reset-password/${token}`;
+  const mailOptions = {
+    from: `"AI Resume Builder" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: 'Reset Your Password',
+    html: `
+      <h2>Password Reset Request</h2>
+      <p>We received a request to reset your password. Click the button below to reset it:</p>
+      <a href="${resetUrl}" style="display:inline-block;padding:10px 20px;background-color:#007BFF;color:white;text-decoration:none;border-radius:5px;">Reset Password</a>
+      <p>If you did not request this, you can safely ignore this email.</p>
+    `
+  };
+  return transporter.sendMail(mailOptions);
+};
+
+module.exports = { sendActivationEmail, sendPasswordResetEmail };

@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const db = require('./config/db');
 const app = express();
-
+const bodyParser = require('body-parser');
 
 // ✅ CORS must come BEFORE any routes
 app.use(cors({
@@ -12,6 +12,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // ✅ All your routes
 const authRoutes = require('./routes/authRoutes');
@@ -31,11 +32,13 @@ app.use('/api/ai', aiRoutes);  // This is for your AI-related routes
 
 const atsRoutes = require('./routes/atsRoutes');
 app.use('/api/ats', atsRoutes);  // ✅ Fix: ATS routes under /api/ats
+
+const mfaRoutes = require('./routes/mfaRoutes');
+app.use('/api/mfa', mfaRoutes);  // ✅ New: MFA routes
+
 const path = require('path');
 const aiSuggestionRoutes = require('./routes/aiSuggestionsRoutes');
 app.use('/api/ai', aiSuggestionRoutes);
-
-
 
 // Serve frontend for any other route (SPA fallback)
 app.use(express.static(path.join(__dirname, '../frontend/build')));
@@ -43,6 +46,7 @@ app.use(express.static(path.join(__dirname, '../frontend/build')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
 });
+
 // Test route
 app.get('/', (req, res) => {
   res.send('🟢 Backend is running!');

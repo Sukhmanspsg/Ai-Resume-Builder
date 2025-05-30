@@ -1,7 +1,7 @@
 const templateModel = require('../models/templateModel');
 const Feedback = require('../models/feedbackModel');
 const { groqGenerateTemplate } = require('../services/groqService');
-const { injectTemplate } = require('../utils/injectTemplate');
+const injectTemplate = require('../utils/injectTemplate');
 const db = require('../db');
 
 // GET ALL TEMPLATES
@@ -63,24 +63,26 @@ exports.renderResumeTemplate = async (req, res) => {
   const templateId = req.params.id;
   const resumeId = req.query.resumeId;
 
+  console.log("🔍 Rendering template:", templateId, "| Resume ID:", resumeId);
+
   try {
     const template = await new Promise((resolve, reject) => {
       templateModel.getTemplateById(templateId, (err, result) => {
-        if (err) reject(err);
-        else resolve(result?.[0] || null);
+        if (err) return reject(err);
+        resolve(result?.[0] || null);
       });
     });
 
     if (!template) return res.status(404).json({ message: 'Template not found' });
 
+    let feedbackJson;
+
     const feedback = await new Promise((resolve, reject) => {
       Feedback.getLatestByResumeId(resumeId, (err, result) => {
-        if (err) reject(err);
-        else resolve(result);
+        if (err) return reject(err);
+        resolve(result);
       });
     });
-
-    let feedbackJson;
 
     if (feedback?.message) {
       feedbackJson = JSON.parse(feedback.message);
@@ -88,22 +90,37 @@ exports.renderResumeTemplate = async (req, res) => {
       const resumeModel = require('../models/resumeModel');
       const resume = await new Promise((resolve, reject) => {
         resumeModel.getResumeById(resumeId, (err, result) => {
-          if (err) reject(err);
-          else resolve(result?.[0] || null);
+          if (err) return reject(err);
+          resolve(result?.[0] || null);
         });
       });
 
-      if (!resume) return res.status(404).json({ message: 'Resume not found' });
+      if (!resume) {
+        console.warn("⚠️ Resume not found, rendering fallback");
+        const renderedHTML = injectTemplate(template.html_code, {});
+        return res.status(200).send(renderedHTML);
+      }
 
-      feedbackJson = JSON.parse(resume.content);
+      try {
+        feedbackJson = JSON.parse(resume.content);
+      } catch (err) {
+        console.error("❌ Failed to parse resume JSON:", err);
+        return res.status(400).json({ message: 'Invalid resume JSON format' });
+      }
     }
 
-    const renderedHTML = injectTemplate(template.html_code, feedbackJson);
+    let renderedHTML;
+    try {
+      renderedHTML = injectTemplate(template.html_code, feedbackJson);
+    } catch (err) {
+      console.error("❌ injectTemplate failed:", err);
+      return res.status(500).json({ message: 'Template injection failed', error: err.message });
+    }
 
     return res.status(200).send(renderedHTML);
   } catch (err) {
-    console.error('❌ renderResumeTemplate error:', err);
-    res.status(500).json({ message: 'Server error', error: err.message });
+    console.error("🔥 Unexpected server error:", err.stack || err);
+    return res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
 
@@ -111,7 +128,6 @@ exports.renderResumeTemplate = async (req, res) => {
 exports.generateTemplateWithAI = async (req, res) => {
   try {
     const { userPrompt } = req.body;
-
     if (!userPrompt) return res.status(400).json({ message: 'Prompt is required' });
 
     const aiResponse = await groqGenerateTemplate(userPrompt);
@@ -124,7 +140,7 @@ exports.generateTemplateWithAI = async (req, res) => {
       return res.status(500).json({ message: 'AI returned incomplete data: html_code missing' });
     }
 
-    // ✅ FIXED: Use correct regex to remove stylesheet line
+    // Clean the AI output and ensure required placeholders
     html_code = html_code.replace(/<link\s+rel="stylesheet"\s+href="\/styles\.css">/gi, '');
 
     const requiredPlaceholders = {
@@ -142,21 +158,18 @@ exports.generateTemplateWithAI = async (req, res) => {
       references: '<h3>References</h3><p>{{references}}</p>'
     };
 
-   // Always add this section at the top if missing
-const introSection = ['name', 'title', 'email', 'contact', 'linkedin']
-.filter(key => !html_code.includes(`{{${key}}}`))
-.map(key => requiredPlaceholders[key])
-.join('\n');
+    const introSection = ['name', 'title', 'email', 'contact', 'linkedin']
+      .filter(key => !html_code.includes(`{{${key}}}`))
+      .map(key => requiredPlaceholders[key])
+      .join('\n');
 
-html_code = introSection + '\n' + html_code;
+    html_code = introSection + '\n' + html_code;
 
-// Add the rest at the end if still missing
-Object.entries(requiredPlaceholders).forEach(([key, htmlSnippet]) => {
-if (!html_code.includes(`{{${key}}}`)) {
-  html_code += `\n${htmlSnippet}`;
-}
-});
-
+    Object.entries(requiredPlaceholders).forEach(([key, htmlSnippet]) => {
+      if (!html_code.includes(`{{${key}}}`)) {
+        html_code += `\n${htmlSnippet}`;
+      }
+    });
 
     templateModel.createTemplate(name, description, html_code, (err, result) => {
       if (err) return res.status(500).json({ message: 'DB error', error: err });
