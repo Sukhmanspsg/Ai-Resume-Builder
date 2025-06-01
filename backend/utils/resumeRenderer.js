@@ -1,10 +1,56 @@
-// const { generateHTMLFromJSON } = require('../utils/resumeRenderer');
-const injectTemplate = require('../utils/injectTemplate'); // 👈 import added
+// Import required dependencies
+const injectTemplate = require('../utils/injectTemplate');
 
-const { generateHTMLFromJSON } = require('../utils/resumeRenderer'); // Utility for fallback rendering
+// Function to generate HTML from JSON
+function generateHTMLFromJSON(json) {
+  // Basic HTML generation from JSON structure
+  let html = `
+    <div class="resume">
+      <h1>${json.name || ''}</h1>
+      <h2>${json.title || ''}</h2>
+      <p>${json.summary || ''}</p>
+      
+      <div class="contact">
+        ${json.email ? `<p>Email: ${json.email}</p>` : ''}
+        ${json.phone ? `<p>Phone: ${json.phone}</p>` : ''}
+        ${json.linkedin ? `<p>LinkedIn: ${json.linkedin}</p>` : ''}
+      </div>
 
-// Optional: consider importing this if you write your own injectTemplate function
-// const { injectTemplate } = require('../utils/injectTemplate');
+      ${json.experience ? `
+        <div class="experience">
+          <h3>Experience</h3>
+          ${json.experience.map(exp => `
+            <div class="job">
+              <h4>${exp.title || ''}</h4>
+              <p>${exp.company || ''} (${exp.dates || ''})</p>
+              <p>${exp.description || ''}</p>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${json.education ? `
+        <div class="education">
+          <h3>Education</h3>
+          ${json.education.map(edu => `
+            <div class="school">
+              <h4>${edu.degree || ''}</h4>
+              <p>${edu.school || ''} (${edu.dates || ''})</p>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${json.skills ? `
+        <div class="skills">
+          <h3>Skills</h3>
+          <p>${Array.isArray(json.skills) ? json.skills.join(', ') : json.skills}</p>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  return html;
+}
 
 exports.resumeRenderer = async (req, res) => {
   const templateId = req.params.id;
@@ -75,4 +121,10 @@ exports.resumeRenderer = async (req, res) => {
     console.error('❌ renderResumeTemplate error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
+};
+
+// Export both functions
+module.exports = {
+  resumeRenderer: exports.resumeRenderer,
+  generateHTMLFromJSON
 };

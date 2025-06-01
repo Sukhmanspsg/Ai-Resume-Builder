@@ -7,92 +7,70 @@ const { generateAIResponse } = require('../utils/groqService');
 // Resume Summary Enhancement
 // ===============================
 exports.enhanceSummary = async (req, res) => {
-  const { name, education, experience, skills } = req.body;
-
-  // Prompt to instruct the AI to generate a clean, professional summary
-  const prompt = `
-  You are a professional resume writer. Based on the following inputs, generate a clean and formal resume summary.
-  
-  Name: ${name}
-  Education: ${education}
-  Experience: ${experience}
-  Skills: ${skills}
-  
-  ⚠️ STRICT RULES:
-  - Do NOT include phrases like “Here is a summary”, “Summary:”, “Here’s a professional summary”, etc.
-  - Do NOT use markdown (no **bold**, headers, bullets).
-  - Do NOT add sections like "Technical Skills" or "Soft Skills".
-  - Do NOT provide notes or explanations.
-  - Do NOT repeat the instructions or input data.
-  - ONLY return a single, polished paragraph written in the third person, using a confident and formal tone.
-  - Keep it around 4–5 lines long.
-  
-  Your response must ONLY contain the summary paragraph — nothing else.
-  `;
-
   try {
-    // Call Groq or other AI model to generate summary
-    const aiResponse = await generateAIResponse(prompt);
+    const { name, education, experience, skills } = req.body;
 
-    // Clean the AI response to remove unwanted lines or headers
-    const lines = aiResponse.split('\n').map(line => line.trim());
+    const prompt = `You are a professional resume writer. Write ONLY the resume summary itself:
+    
+    Name: ${name}
+    Education: ${education}
+    Experience: ${experience}
+    Skills: ${skills}
+    
+    STRICT RULES:
+    1. Write EXACTLY 4-5 lines total
+    2. Each line must end with a period
+    3. Start with role/title and years of experience
+    4. Include key achievements with metrics from ALL work experiences
+    5. End with career focus or value proposition
+    6. Use formal, third-person language
+    7. NO introductory phrases or text before the summary
+    8. NO bullet points or special formatting
+    9. NO first-person pronouns (I, my, etc.)
+    10. NO generic phrases like "seeking opportunities"
+    11. Start DIRECTLY with the role/title, DO NOT include any introductory text
+    12. Combine and synthesize achievements from ALL work experiences
+    
+    Your response must ONLY contain the summary paragraph — nothing else.`;
 
-    // Filter out short lines and generic fluff
-    const filtered = lines.filter(line => {
-      const lower = line.toLowerCase();
-      return (
-        line.length > 20 && // Skip very short lines
-        !lower.includes('summary') &&
-        !lower.includes('here is') &&
-        !lower.includes('certified web developer') &&
-        !lower.includes('based on') &&
-        !lower.startsWith('**') &&
-        !lower.endsWith('**')
-      );
-    });
-
-    // Join filtered lines and normalize spaces
-    const cleanedSummary = filtered.join(' ').replace(/\s+/g, ' ').trim();
-
-    // Respond with the cleaned summary
-    res.json({ suggestedSummary: cleanedSummary });
+    const summary = await generateAIResponse(prompt);
+    res.json({ suggestedSummary: summary });
   } catch (err) {
-    console.error('❌ Summary AI error:', err.message);
-    res.status(500).json({ error: 'Failed to generate summary' });
+    console.error('Summary generation error:', err);
+    res.status(500).json({ message: 'Failed to generate summary' });
   }
 };
 
 // ===============================
-// AI Skill Suggestion Endpoint
+// Skill Suggestions
 // ===============================
 exports.suggestSkills = async (req, res) => {
-  const { input } = req.body;
-
-  // Basic input validation
-  if (!input || input.length < 2) {
-    return res.status(400).json({ suggestions: [] });
-  }
-
-  // Prompt to get related skill suggestions
-  const prompt = `
-    You are a resume optimization assistant.
-    Suggest 5 technical or soft skills related to the keyword: "${input}".
-    Respond ONLY with a plain comma-separated list, no introduction or explanation.
-  `;
-
   try {
-    // Ask the AI model to generate suggestions
-    const text = await generateAIResponse(prompt); // e.g., "JavaScript, React, HTML, CSS, Node.js"
+    const { input } = req.body;
 
-    // Clean and split into array
-    const suggestions = text
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    if (!input) {
+      return res.json({ suggestions: [] });
+    }
+
+    const prompt = `Based on the partial skill input "${input}", suggest 5 relevant professional skills that would be valuable on a resume. Consider both technical and soft skills. Return ONLY an array of skills, no explanations.`;
+
+    const response = await generateAIResponse(prompt);
+    
+    // Clean and parse the response into an array
+    const suggestions = response
+      .split(/[\n,]/)
+      .map(skill => skill.trim())
+      .filter(skill => 
+        skill && 
+        !skill.includes('•') && 
+        !skill.includes('-') &&
+        skill.toLowerCase().includes(input.toLowerCase())
+      )
+      .slice(0, 5);
 
     res.json({ suggestions });
   } catch (err) {
-    console.error('❌ Groq Skill Suggestion Error:', err);
-    res.status(500).json({ message: 'Groq failed to suggest skills.' });
+    console.error('Skill suggestion error:', err);
+    res.status(500).json({ message: 'Failed to suggest skills' });
   }
 };

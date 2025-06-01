@@ -35,7 +35,7 @@ function App() {
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/edit-resume/:id" element={<EditResume />} />
         <Route path="/resume-preview" element={<ResumePreview />} />
-        <Route path="/CoverLetter" element={<CoverLetter />} />
+        <Route path="/cover-letter" element={<CoverLetter />} />
         <Route path="/templates" element={<Templates />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />

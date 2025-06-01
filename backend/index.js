@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('./config/db');
 const app = express();
 const bodyParser = require('body-parser');
+const path = require('path');
 
 // ✅ CORS must come BEFORE any routes
 app.use(cors({
@@ -14,42 +15,33 @@ app.use(cors({
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ✅ All your routes
+// Import routes
 const authRoutes = require('./routes/authRoutes');
-app.use('/api/auth', authRoutes);
-
 const resumeRoutes = require('./routes/resumeRoutes');
-app.use('/api/resumes', resumeRoutes);
-
 const templateRoutes = require('./routes/templateRoutes');
-app.use('/api/templates', templateRoutes);
-
 const feedbackRoutes = require('./routes/feedbackRoutes');
-app.use('/api/feedback', feedbackRoutes);
-
 const aiRoutes = require('./routes/aiRoutes');
-app.use('/api/ai', aiRoutes);  // This is for your AI-related routes
-
-const atsRoutes = require('./routes/atsRoutes');
-app.use('/api/ats', atsRoutes);  // ✅ Fix: ATS routes under /api/ats
-
-const mfaRoutes = require('./routes/mfaRoutes');
-app.use('/api/mfa', mfaRoutes);  // ✅ New: MFA routes
-
-const path = require('path');
 const aiSuggestionRoutes = require('./routes/aiSuggestionsRoutes');
+
+// Mount API routes first
+app.use('/api/auth', authRoutes);
+app.use('/api/resumes', resumeRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/ai', aiSuggestionRoutes);
 
-// Serve frontend for any other route (SPA fallback)
-app.use(express.static(path.join(__dirname, '../frontend/build')));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
+// Test route
+app.get('/api/test', (req, res) => {
+  res.send('🟢 Backend is running!');
 });
 
-// Test route
-app.get('/', (req, res) => {
-  res.send('🟢 Backend is running!');
+// Serve static files from the React app build directory
+app.use(express.static(path.join(__dirname, '../build')));
+
+// Catch all handler: send back React's index.html file for any non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../build/index.html'));
 });
 
 const PORT = process.env.PORT || 5000;

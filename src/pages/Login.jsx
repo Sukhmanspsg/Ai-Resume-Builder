@@ -21,7 +21,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/api/auth/login', {
+      const response = await api.post('/auth/login', {
         email,
         password,
         ...(showMfaInput && { mfaToken })
@@ -32,7 +32,7 @@ const Login = () => {
         
         if (response.data.needsSetup) {
           try {
-            const setupResponse = await api.post('/api/mfa/setup', null, {
+            const setupResponse = await api.post('/mfa/setup', null, {
               headers: { Authorization: `Bearer ${response.data.tempToken}` }
             });
             
@@ -62,7 +62,7 @@ const Login = () => {
       if (err.response?.data?.requiresMFA) {
         if (err.response.data.needsSetup) {
           try {
-            const setupResponse = await api.post('/api/mfa/setup', null, {
+            const setupResponse = await api.post('/mfa/setup', null, {
               headers: { Authorization: `Bearer ${err.response.data.tempToken}` }
             });
             
@@ -105,7 +105,7 @@ const Login = () => {
       });
 
       // Then try to login again with the verified token
-      const loginResponse = await api.post('/api/auth/login', {
+      const loginResponse = await api.post('/auth/login', {
         email,
         password,
         mfaToken

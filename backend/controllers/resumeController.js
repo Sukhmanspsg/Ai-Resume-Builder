@@ -11,13 +11,21 @@ const upload = multer({ dest: 'uploads/' });
 const createResume = (req, res) => {
   console.log("➡️ Reached createResume route");
 
-  const { user_id, title, content } = req.body;
+  const { title, content } = req.body;
+  const user_id = req.user.id; // Get user_id from JWT token
   const template_id = req.body.template_id || 1;
+
+  if (!title || !content) {
+    return res.status(400).json({ message: 'Title and content are required.' });
+  }
 
   const stringifiedContent = JSON.stringify(content);
 
   resumeModel.createResume(user_id, template_id, title, stringifiedContent, (err, result) => {
-    if (err) return res.status(500).json({ message: 'Database error', error: err });
+    if (err) {
+      console.error('Database error in createResume:', err);
+      return res.status(500).json({ message: 'Database error', error: err });
+    }
 
     res.status(201).json({ message: 'Resume created', resumeId: result.insertId });
   });

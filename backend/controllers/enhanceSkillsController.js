@@ -4,43 +4,46 @@ const { generateAIResponse } = require('../utils/groqService');
 // AI-POWERED SKILL ENHANCEMENT ENDPOINT
 // ===========================================
 exports.enhanceSkills = async (req, res) => {
-  const { jobTitle, responsibilities, education, currentSkills } = req.body;
-
-  // Create prompt for the AI model to suggest missing skills
-  const prompt = `
-    Based on the following resume information:
-    - Job Title: ${jobTitle}
-    - Responsibilities: ${responsibilities}
-    - Education: ${education}
-    - Current Skills: ${currentSkills}
-    
-    Suggest 5 relevant skills that are missing.
-    Respond only with a JSON array like ["Skill A", "Skill B", "Skill C"].
-  `;
-
   try {
-    // Get raw AI response (string)
-    const raw = await generateAIResponse(prompt);
-    let parsed;
+    const { workExperience, education, currentSkills } = req.body;
 
-    try {
-      // Try to parse response as JSON
-      parsed = JSON.parse(raw);
-    } catch {
-      // Fallback: extract and parse JSON array if wrapped in extra text
-      const jsonMatch = raw.match(/\[.*\]/s); // match anything in brackets
-      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-    }
+    // Create a comprehensive prompt for skill suggestions
+    const prompt = `Based on the following work experience and education, suggest relevant technical and soft skills that would enhance this resume. Do not include any skills that are already in the current skills list.
 
-    // Validate that the result is an array
-    if (!Array.isArray(parsed)) {
-      throw new Error('Parsed response is not an array');
-    }
+    Work Experience:
+    ${workExperience.map(exp => `${exp.title} at ${exp.company}: ${exp.responsibilities}`).join('\n')}
 
-    // Send enhanced skill suggestions to client
-    res.json({ enhancedSkills: parsed });
+    Education:
+    ${education.map(edu => `${edu.degree} from ${edu.university}`).join('\n')}
+
+    Current Skills:
+    ${currentSkills.join(', ')}
+
+    Please suggest only skills that are:
+    1. Relevant to the work experience
+    2. Not already in the current skills list
+    3. In high demand in today's job market
+    4. Specific and actionable
+    5. A mix of technical and soft skills
+
+    Return ONLY an array of skills, no explanations or formatting.`;
+
+    const response = await generateAIResponse(prompt);
+    
+    // Clean and parse the response into an array
+    const enhancedSkills = response
+      .split(/[\n,]/)
+      .map(skill => skill.trim())
+      .filter(skill => 
+        skill && 
+        !skill.includes('•') && 
+        !skill.includes('-') &&
+        !currentSkills.includes(skill)
+      );
+
+    res.json({ enhancedSkills });
   } catch (err) {
-    console.error('Groq Skill Suggestion Error:', err.message);
-    res.status(500).json({ message: 'AI failed to suggest skills.' });
+    console.error('Skill enhancement error:', err);
+    res.status(500).json({ message: 'Failed to enhance skills' });
   }
 };

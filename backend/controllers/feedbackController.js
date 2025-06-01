@@ -1,4 +1,6 @@
 const { generateHTMLFromJSON } = require('../utils/resumeRenderer');
+const FeedbackModel = require('../models/feedbackModel');
+const { generateAIResponse } = require('../utils/groqService');
 
 // ============================================
 // Generate AI Resume Feedback + HTML Preview
@@ -59,14 +61,7 @@ exports.generateFeedback = async (req, res) => {
 
   try {
     // 🔍 Send prompt to Groq for AI-generated resume JSON
-    const aiResponse = await groq.chat.completions.create({
-      model: 'llama3-8b-8192',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.9
-    });
-
-    // 📝 Get the raw string output
-    const rawJson = aiResponse.choices[0].message.content;
+    const rawJson = await generateAIResponse(prompt);
 
     let parsedJson;
 
@@ -85,8 +80,8 @@ exports.generateFeedback = async (req, res) => {
     // 🎨 Render the resume into HTML using the parsed JSON
     const renderedHtml = generateHTMLFromJSON(parsedJson);
 
-    // 💾 Save feedback to the database (assuming feedbackModel is globally available or imported)
-    feedbackModel.saveFeedback(user_id, resume_id, rawJson, (err, result) => {
+    // 💾 Save feedback to the database
+    FeedbackModel.createFeedback(user_id, resume_id, 5, 'AI generated feedback', (err, result) => {
       if (err) {
         return res.status(500).json({ message: 'Failed to save feedback', error: err });
       }
@@ -104,4 +99,80 @@ exports.generateFeedback = async (req, res) => {
     console.error('Groq Error:', error);
     res.status(500).json({ message: 'AI generation failed', error: error.message });
   }
+};
+
+exports.submitFeedback = (req, res) => {
+  const { userId, resumeId, rating, comment } = req.body;
+
+  // Validate rating
+  if (!rating || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+  }
+
+  // Use userId from request if available, otherwise allow anonymous feedback
+  const finalUserId = userId || null;
+  const finalResumeId = resumeId || null;
+  const finalComment = comment || '';
+
+  FeedbackModel.createFeedback(finalUserId, finalResumeId, rating, finalComment, (err, result) => {
+    if (err) {
+      console.error('Error submitting feedback:', err);
+      return res.status(500).json({ error: 'Failed to submit feedback' });
+    }
+    
+    console.log('✅ Feedback submitted successfully:', {
+      id: result.insertId,
+      userId: finalUserId,
+      rating: rating,
+      comment: finalComment ? 'Yes' : 'No comment'
+    });
+    
+    res.json({ 
+      message: 'Feedback submitted successfully', 
+      id: result.insertId,
+      success: true
+    });
+  });
+};
+
+exports.getAllFeedback = (req, res) => {
+  // Only admin users should be able to access this endpoint
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized access' });
+  }
+
+  FeedbackModel.getAllFeedback((err, feedback) => {
+    if (err) {
+      console.error('Error fetching feedback:', err);
+      return res.status(500).json({ error: 'Failed to fetch feedback' });
+    }
+    res.json(feedback);
+  });
+};
+
+exports.getFeedbackStats = (req, res) => {
+  // Only admin users should be able to access this endpoint
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized access' });
+  }
+
+  FeedbackModel.getFeedbackStats((err, stats) => {
+    if (err) {
+      console.error('Error fetching feedback stats:', err);
+      return res.status(500).json({ error: 'Failed to fetch feedback statistics' });
+    }
+    res.json(stats);
+  });
+};
+
+exports.getFeedbackByResume = (req, res) => {
+  const { resumeId } = req.params;
+
+  FeedbackModel.getFeedbackByResumeId(resumeId, (err, feedback) => {
+    if (err) {
+      console.error('Error fetching resume feedback:', err);
+      return res.status(500).json({ error: 'Failed to fetch resume feedback' });
+    }
+    res.json(feedback);
+  });
 };

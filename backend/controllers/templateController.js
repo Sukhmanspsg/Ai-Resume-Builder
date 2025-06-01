@@ -1,6 +1,6 @@
 const templateModel = require('../models/templateModel');
 const Feedback = require('../models/feedbackModel');
-const { groqGenerateTemplate } = require('../services/groqService');
+const { groqGenerateTemplate, generateAIResponse } = require('../services/groqService');
 const injectTemplate = require('../utils/injectTemplate');
 const db = require('../db');
 
@@ -179,4 +179,70 @@ exports.generateTemplateWithAI = async (req, res) => {
     console.error('❌ Failed to generate template:', err.stack || err);
     res.status(500).json({ message: 'AI template generation failed', error: err.message });
   }
+};
+
+// GENERATE AI TEMPLATE
+exports.generateTemplate = async (req, res) => {
+  const { userPrompt } = req.body;
+
+  if (!userPrompt) {
+    return res.status(400).json({ message: 'Prompt is required' });
+  }
+
+  // Check if GROQ API key is available
+  if (!process.env.GROQ_API_KEY) {
+    console.error('❌ GROQ_API_KEY not found in environment variables');
+    return res.status(500).json({ 
+      message: 'AI service not configured. Please contact administrator.',
+      error: 'GROQ_API_KEY not set' 
+    });
+  }
+
+  console.log('✅ GROQ_API_KEY found, proceeding with template generation...');
+
+  try {
+    const aiResponse = await groqGenerateTemplate(userPrompt);
+
+    if (!aiResponse || !aiResponse.component_code) {
+      throw new Error('Invalid response from AI service');
+    }
+
+    // Return the template data directly to the frontend
+    res.status(200).json({
+      template: {
+        name: aiResponse.name,
+        description: aiResponse.description,
+        component_code: aiResponse.component_code
+      }
+    });
+  } catch (err) {
+    console.error('❌ Failed to generate template:', err);
+    res.status(500).json({ 
+      message: 'AI template generation failed', 
+      error: err.message 
+    });
+  }
+};
+
+// Helper function to extract React component code from OpenAI response
+function extractComponentCode(response) {
+  // Look for code blocks in markdown format
+  const codeBlockMatch = response.match(/```(?:jsx|javascript|react)?\n([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    return codeBlockMatch[1].trim();
+  }
+  
+  // If no code blocks found, return the entire response
+  return response.trim();
+}
+
+module.exports = {
+  getAllTemplates: exports.getAllTemplates,
+  renderResumeTemplate: exports.renderResumeTemplate,
+  createTemplate: exports.createTemplate,
+  updateTemplate: exports.updateTemplate,
+  deleteTemplate: exports.deleteTemplate,
+  generateTemplateWithAI: exports.generateTemplateWithAI,
+  getTemplateById: exports.getTemplateById,
+  generateTemplate: exports.generateTemplate
 };

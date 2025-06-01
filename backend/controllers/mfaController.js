@@ -134,12 +134,25 @@ const verifyMFAToken = async (req, res) => {
       return res.status(400).json({ message: 'Invalid MFA token' });
     }
 
-    res.json({ message: 'MFA token verified', verified: true });
+    // ✅ NEW: Generate a JWT token after successful MFA
+    const jwtToken = jwt.sign(
+      { id: userId },
+      process.env.JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
+    res.json({
+      message: 'MFA token verified',
+      verified: true,
+      token: jwtToken // 🟢 You’ll use this for Authorization header
+    });
+
   } catch (error) {
     console.error('MFA verification error:', error);
     res.status(500).json({ message: 'Error verifying MFA token' });
   }
 };
+
 
 // Disable MFA
 const disableMFA = async (req, res) => {

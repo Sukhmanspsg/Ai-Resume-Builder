@@ -16,46 +16,27 @@ const ResumeEditor = () => {
     const savedData = localStorage.getItem('resumeData');
     const locationData = location.state || {};
     
-    // Default empty state with sample data
+    // Default empty state
     const defaultData = {
-      title: 'Student Mentor Resume',
-      name: 'Sukhmanpreet Singh',
-      email: 'sukhman29spsg@gmail.com',
-      contact: '0426167301',
-      linkedin: 'https://www.linkedin.com/in/sukhmanpreet-singh-93b72118a/',
+      title: '',
+      name: '',
+      email: '',
+      contact: '',
+      linkedin: '',
       workExperience: [{ 
-        title: 'Student Mentor', 
-        company: 'Victoria University (VU)', 
-        duration: '2020 - 2024', 
-        responsibilities: `• Provided comprehensive academic support and guidance to a diverse group of 20+ students per semester, resulting in an average 15% improvement in academic performance
-• Facilitated weekly one-on-one mentoring sessions to help students develop effective study strategies, time management skills, and academic goals
-• Collaborated with faculty members and academic advisors to identify and support students facing academic challenges
-• Created and maintained detailed progress reports for each mentee, tracking their academic development and areas for improvement
-• Organized and led bi-weekly study groups and workshops on topics such as exam preparation, research methods, and academic writing
-• Developed and implemented personalized learning plans for students with diverse learning styles and needs
-• Served as a liaison between students and faculty, helping to resolve academic concerns and facilitate effective communication
-• Maintained 95% positive feedback rating from mentees through consistent support and guidance
-• Actively participated in mentor training programs and professional development workshops to enhance mentoring skills`
+        title: '', 
+        company: '', 
+        duration: '', 
+        responsibilities: ''
       }],
       education: [{ 
-        degree: 'Bachelor of Information Technology', 
-        university: 'Victoria University', 
-        year: '2025' 
+        degree: '', 
+        university: '', 
+        year: '' 
       }],
-      skills: [
-        'Academic Mentoring',
-        'Student Support',
-        'Time Management',
-        'Communication',
-        'Problem-Solving',
-        'Leadership',
-        'Conflict Resolution',
-        'Program Development',
-        'Data Analysis',
-        'Team Collaboration'
-      ],
-      certifications: ['C++'],
-      summary: `Results-driven Student Mentor with 4 years of experience providing comprehensive academic support and guidance at Victoria University. Demonstrated success in improving student academic performance through personalized mentoring, effective study strategies, and strong communication skills. Proven track record of developing and implementing successful learning plans for diverse student populations. Skilled in fostering a positive learning environment while maintaining high standards of academic integrity and student success. Committed to continuous improvement and professional development in student mentoring and academic support services.`,
+      skills: [],
+      certifications: [],
+      summary: '',
       references: 'Available upon request'
     };
     
@@ -72,6 +53,12 @@ const ResumeEditor = () => {
       };
       localStorage.setItem('resumeData', JSON.stringify(mergedData));
       return mergedData;
+    }
+    
+    // If we're creating a new resume (no location state), clear localStorage
+    if (Object.keys(locationData).length === 0) {
+      localStorage.removeItem('resumeData');
+      return defaultData;
     }
     
     // If we have saved data in localStorage, use that
@@ -127,61 +114,166 @@ const ResumeEditor = () => {
   // Function to save/update resume in database
   const saveToDatabase = async (data) => {
     try {
-      setIsSaving(true);
       const token = localStorage.getItem('token');
       if (!token) {
-        alert("You're not logged in. Please log in to save your resume.");
-        navigate('/login');
-        return false;
+        throw new Error('No authentication token found');
       }
 
-      const decoded = jwtDecode(token);
-      const user_id = decoded.id;
-
-      const content = {
-        ...data,
-        workExperience: data.workExperience.filter(exp => 
-          exp.title || exp.company || exp.duration || exp.responsibilities
-        ),
-        education: data.education.filter(edu => 
-          edu.degree || edu.university || edu.year
-        )
+      // Clean and validate the data
+      const cleanedData = {
+        name: data.name?.trim() || '',
+        email: data.email?.trim() || '',
+        contact: data.contact?.trim() || '',
+        linkedin: data.linkedin?.trim() || '',
+        summary: data.summary?.trim() || '',
+        references: data.references?.trim() || 'Available upon request',
+        workExperience: (data.workExperience || [])
+          .filter(exp => exp.title || exp.company || exp.duration || exp.responsibilities)
+          .map(exp => ({
+            title: exp.title?.trim() || '',
+            company: exp.company?.trim() || '',
+            duration: exp.duration?.trim() || '',
+            responsibilities: exp.responsibilities?.trim() || ''
+          })),
+        education: (data.education || [])
+          .filter(edu => edu.degree || edu.university || edu.year)
+          .map(edu => ({
+            degree: edu.degree?.trim() || '',
+            university: edu.university?.trim() || '',
+            year: edu.year?.trim() || ''
+          })),
+        skills: (data.skills || []).map(skill => skill.trim()),
+        certifications: (data.certifications || []).map(cert => cert.trim())
       };
 
+      // Validate required fields
+      const missingFields = [];
+      if (!cleanedData.name) missingFields.push('Name');
+      if (!cleanedData.email) missingFields.push('Email');
+      if (!cleanedData.contact) missingFields.push('Contact');
+
+      if (missingFields.length > 0) {
+        throw new Error(`Required fields missing: ${missingFields.join(', ')}`);
+      }
+
       const payload = {
-        user_id,
-        title: data.title,
-        content: JSON.stringify(content),
+        title: data.title?.trim() || `${cleanedData.name}'s Resume`,
+        content: cleanedData,
         template_id: 1
       };
 
       let response;
-      if (resumeId) {
-        // Update existing resume
-        response = await api.put(`/api/resumes/${resumeId}`, payload, {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+      try {
+        if (resumeId) {
+          // Update existing resume
+          response = await api.put(`/resumes/${resumeId}`, payload);
+          console.log('✅ Resume updated successfully:', response.data);
+        } else {
+          // Create new resume
+          response = await api.post('/resumes', payload);
+          console.log('✅ Resume created successfully:', response.data);
+          if (response.data.resumeId) {
+            setResumeId(response.data.resumeId);
           }
-        });
-      } else {
-        // Create new resume
-        response = await api.post('/api/resumes', payload, {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        if (response.data.resumeId) {
-          setResumeId(response.data.resumeId);
         }
+
+        // Show success message
+        const successMessage = document.createElement('div');
+        successMessage.className = 'fixed bottom-4 right-4 bg-green-100 text-green-800 px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2';
+        successMessage.innerHTML = `
+          <span>✅</span>
+          <span>Resume ${resumeId ? 'updated' : 'saved'} successfully!</span>
+        `;
+        document.body.appendChild(successMessage);
+        setTimeout(() => successMessage.remove(), 3000);
+
+        return true;
+      } catch (apiError) {
+        console.error('API Error:', apiError.response?.data || apiError.message);
+        throw new Error(apiError.response?.data?.message || 'Failed to save resume');
+      }
+    } catch (err) {
+      console.error('Save to database error:', err);
+      throw err;
+    }
+  };
+
+  // Handle save and navigation
+  const handleSaveResume = async () => {
+    try {
+      // Check for authentication
+      const token = localStorage.getItem('token');
+      if (!token) {
+        // Save current resume data to localStorage for retrieval after login
+        localStorage.setItem('pendingResumeData', JSON.stringify(resumeData));
+        alert('Please log in to save your resume.');
+        navigate('/login', { state: { returnTo: '/resume-editor' } });
+        return;
       }
 
-      return true;
+      // Validate required fields
+      const requiredFields = {
+        name: 'Full Name',
+        email: 'Email',
+        contact: 'Phone Number'
+      };
+
+      const missingFields = Object.entries(requiredFields)
+        .filter(([key]) => !resumeData[key]?.trim())
+        .map(([, label]) => label);
+
+      if (missingFields.length > 0) {
+        alert(`Please fill in the following required fields:\n${missingFields.join('\n')}`);
+        return;
+      }
+
+      setIsSaving(true);
+      const saved = await saveToDatabase(resumeData);
+      if (saved) {
+        // Create success message element
+        const messageId = 'save-success-message';
+        const existingMessage = document.getElementById(messageId);
+        if (existingMessage) {
+          existingMessage.remove();
+        }
+
+        const successMessage = document.createElement('div');
+        successMessage.id = messageId;
+        successMessage.className = 'fixed bottom-4 right-4 bg-green-100 text-green-800 px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 transition-opacity duration-500';
+        successMessage.innerHTML = `
+          <span>✅</span>
+          <span>Resume saved! Redirecting to preview...</span>
+        `;
+        document.body.appendChild(successMessage);
+        
+        // Start fade out animation after 1 second
+        setTimeout(() => {
+          successMessage.style.opacity = '0';
+        }, 1000);
+
+        // Remove message and navigate after fade out
+        setTimeout(() => {
+          successMessage.remove();
+          navigate('/resume-preview', {
+            state: {
+              ...resumeData,
+              id: resumeId
+            }
+          });
+        }, 1500);
+      }
     } catch (err) {
       console.error('Save resume error:', err);
-      alert(err.response?.data?.message || 'Failed to save resume. Please try again.');
-      return false;
+      if (err.response?.status === 401) {
+        // Token expired or invalid
+        localStorage.removeItem('token');
+        alert('Your session has expired. Please log in again.');
+        // Save current resume data
+        localStorage.setItem('pendingResumeData', JSON.stringify(resumeData));
+        navigate('/login', { state: { returnTo: '/resume-editor' } });
+      } else {
+        alert(err.message || 'Failed to save resume. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -223,7 +315,7 @@ const ResumeEditor = () => {
     const value = e.target.value;
     setSkillInput(value);
     try {
-      const res = await api.post('/api/ai/suggest-skills', { input: value });
+      const res = await api.post('/ai/suggest-skills', { input: value });
       setSuggestedSkills(res.data.suggestions || []);
     } catch {
       setSuggestedSkills([]);
@@ -277,7 +369,7 @@ const ResumeEditor = () => {
         return;
       }
 
-      const res = await api.post('/api/ai/enhance-skills', skillData);
+      const res = await api.post('/ai/enhance-skills', skillData);
       
       if (res.data.enhancedSkills && Array.isArray(res.data.enhancedSkills)) {
         // Filter out skills that are already in the resume
@@ -313,83 +405,53 @@ const ResumeEditor = () => {
   const handleAISummary = async () => {
     try {
       const summaryData = {
-        name: resumeData.name,
-        education: resumeData.education[0] ? 
-          `${resumeData.education[0].degree} from ${resumeData.education[0].university} (${resumeData.education[0].year})` : '',
         experience: resumeData.workExperience
           .filter(exp => exp.title && exp.company)
           .map(exp => `${exp.title} at ${exp.company} (${exp.duration}): ${exp.responsibilities}`)
           .join('. '),
+        education: resumeData.education[0] ? 
+          `${resumeData.education[0].degree} from ${resumeData.education[0].university} (${resumeData.education[0].year})` : '',
         skills: resumeData.skills.join(', '),
         certifications: resumeData.certifications.join(', ')
       };
       
-      const prompt = `📌 Instructions to Generate Resume Summary:
-      Generate a BRIEF professional resume summary (2-5 lines MAXIMUM, separated by periods).
-
-      Available Information:
-      - Current Role: ${summaryData.experience || 'N/A'}
-      - Education: ${summaryData.education || 'N/A'}
-      - Skills: ${summaryData.skills || 'N/A'}
-      - Certifications: ${summaryData.certifications || 'N/A'}
-
-      STRICT FORMATTING RULES:
-      - MUST be between 2-5 lines total
-      - Each line should end with a period
-      - Start directly with content (no introductions)
-      - NO headers, formatting, or symbols
-      - NO phrases like "Here's a summary" or "Feel free to modify"
-      - Keep each line focused and concise
-      - Use present tense for current roles
-      
-      Example of GOOD format (3 lines):
-      Results-driven Student Mentor with 4 years of experience in academic support and program development. Demonstrated expertise in improving student performance through personalized mentoring and workshop facilitation. Seeking to leverage mentoring and leadership skills while driving educational excellence.
-
-      Example of BAD format (too long):
-      Results-driven Student Mentor with extensive experience in academic support and program development. Demonstrated expertise in improving student performance through personalized mentoring and workshop facilitation. Proven track record of developing and implementing successful learning plans for diverse student populations. Skilled in fostering a positive learning environment while maintaining high standards of academic integrity. Committed to continuous improvement and professional development in student mentoring. Seeking to leverage mentoring and leadership skills while driving educational excellence.`;
-      
-      const res = await api.post('/api/ai', summaryData);
+      const res = await api.post('/ai/summary', summaryData);
       
       if (res.data.suggestedSummary) {
         // Clean up the AI response
         let cleanedSummary = res.data.suggestedSummary
-          .replace(/^Here['']s.*?:\s*/i, '')
-          .replace(/^Based on.*?:\s*/i, '')
-          .replace(/^\*\*Summary:\*\*\s*/i, '')
-          .replace(/^Summary:\s*/i, '')
-          .replace(/\*\*(.*?)\*\*/g, '$1')
-          .replace(/Feel free.*$/, '')
-          .replace(/You can customize.*$/, '')
-          .replace(/I hope this helps.*$/, '')
+          // Remove any introductory phrases
+          .replace(/^(here is|here's|this is|summary:|professional summary:|resume summary:)/i, '')
+          // Remove quotes and extra spaces
+          .replace(/^["'\s]+/, '')
+          .replace(/["'\s]+$/, '')
+          // Remove any AI commentary
+          .replace(/\n.*suggestions.*$/i, '')
+          .replace(/\n.*customize.*$/i, '')
+          .replace(/\n.*hope this.*$/i, '')
+          // Ensure proper spacing
+          .replace(/\s+/g, ' ')
           .trim();
 
-        // Remove unwanted starting phrases
+        // Ensure it starts with a role/title
         const unwantedStarts = [
-          'This summary', 'A professional', 'This professional',
-          'Here is', 'This is', 'The following'
+          'a professional',
+          'an experienced',
+          'this candidate',
+          'the candidate',
+          'the professional'
         ];
         
         for (const phrase of unwantedStarts) {
-          if (cleanedSummary.toLowerCase().startsWith(phrase.toLowerCase())) {
+          if (cleanedSummary.toLowerCase().startsWith(phrase)) {
             cleanedSummary = cleanedSummary.substring(phrase.length).trim();
           }
         }
 
-        // Enforce line limit
-        let lines = cleanedSummary
-          .split(/[.!?]+/)
-          .map(line => line.trim())
-          .filter(line => line.length > 0);
-
-        // Keep only 2-5 lines
-        if (lines.length > 5) {
-          lines = lines.slice(0, 5);
-        } else if (lines.length < 2) {
-          throw new Error('Summary too short');
+        // Ensure it ends with a period
+        if (!cleanedSummary.endsWith('.')) {
+          cleanedSummary += '.';
         }
-
-        // Reconstruct summary with proper punctuation
-        cleanedSummary = lines.join('. ') + '.';
 
         setResumeData(prev => ({
           ...prev,
@@ -401,29 +463,6 @@ const ResumeEditor = () => {
     } catch (err) {
       console.error('❌ Summary generation failed:', err);
       alert('Could not generate summary with AI. Please try again.');
-    }
-  };
-
-  // Handle save and navigation
-  const handleSaveResume = async () => {
-    try {
-      if (!resumeData.title || !resumeData.name || !resumeData.email || !resumeData.contact) {
-        alert('Please fill in all required fields (Title, Name, Email, and Contact)');
-        return;
-      }
-
-      const saved = await saveToDatabase(resumeData);
-      if (saved) {
-        navigate('/resume-preview', {
-          state: {
-            ...resumeData,
-            id: resumeId
-          }
-        });
-      }
-    } catch (err) {
-      console.error('Save resume error:', err);
-      alert(err.response?.data?.message || 'Failed to save resume. Please try again.');
     }
   };
 
@@ -450,42 +489,14 @@ const ResumeEditor = () => {
         return;
       }
 
-      const prompt = `Generate 12-15 different possible job responsibilities for the position of ${jobData.title} at ${jobData.company}.
-      Current responsibilities: ${jobData.responsibilities || 'None'}
-      Duration: ${jobData.duration || 'Not specified'}
-      Education: ${resumeData.education[0]?.degree || ''}
-      
-      IMPORTANT: Generate ONLY responsibilities, no headers, no formatting, no summaries.
-      
-      Each responsibility should:
-      • Be EXTREMELY concise (5-7 words maximum)
-      • Start with a strong action verb
-      • Include specific metrics when possible
-      • Be direct and impactful
-      • Focus on key achievements
-      • NO headers or sections
-      • NO formatting or symbols
-      • NO education or experience summaries
-      
-      Examples of good format:
-      Mentored 20 students to success
-      Increased team productivity by 40%
-      Led five successful project launches
-      Managed $500K annual budget
-      
-      BAD examples (DO NOT generate these):
-      + Education:
-      + Experience:
-      ** Job Title **
-      Summary:
-      
-      Generate ONLY responsibilities, one per line.`;
+      // Gather context about the position
+      const context = {
+        title: jobData.title,
+        company: jobData.company,
+        experience: `${jobData.title} at ${jobData.company} (${jobData.duration || 'Not specified'}): ${jobData.responsibilities || 'None'}`
+      };
 
-      const res = await api.post('/api/ai', {
-        experience: `${jobData.title} at ${jobData.company}`,
-        education: resumeData.education[0]?.degree || '',
-        skills: prompt
-      });
+      const res = await api.post('/ai', context);
 
       if (res.data.suggestedSummary) {
         // Parse and clean up the AI response
@@ -493,46 +504,29 @@ const ResumeEditor = () => {
           .split('\n')
           .filter(line => {
             const trimmed = line.trim();
-            // Skip lines that look like headers or formatting
+            // Skip empty lines and formatting
             if (!trimmed) return false;
-            if (trimmed.startsWith('+')) return false;
-            if (trimmed.startsWith('**')) return false;
-            if (trimmed.startsWith('Education:')) return false;
-            if (trimmed.startsWith('Experience:')) return false;
-            if (trimmed.startsWith('Summary:')) return false;
-            if (trimmed.includes('(20')) return false; // Skip date ranges
-            if (/^\d{4}$/.test(trimmed)) return false; // Skip year numbers
-            if (trimmed.match(/^[A-Za-z]+ of [A-Za-z]+/)) return false; // Skip degree titles
+            if (trimmed.startsWith('Example')) return false;
+            if (trimmed.startsWith('Here')) return false;
+            if (trimmed.includes('Guidelines')) return false;
             return true;
           })
           .map(line => {
             // Clean up the text
             let cleaned = line.trim()
               .replace(/^[•\-\+\*]+\s*/, '') // Remove bullet points
-              .replace(/^\*\*.*?\*\*/, '') // Remove bold text
-              .replace(/^Here is.*?:/, '') // Remove intros
-              .replace(/^As a.*?:/, '') // Remove role intros
-              .replace(/Notable achievements include:/, '') // Remove headers
-              .replace(/^[A-Za-z]+ of [A-Za-z]+.*$/, '') // Remove degree lines
-              .replace(/\([^)]*\)/g, '') // Remove parentheses and their content
-              .replace(/^\d{4}(-\d{4})?:?/, '') // Remove year ranges
+              .replace(/^\d+\.\s*/, '') // Remove numbering
+              .replace(/^[^a-zA-Z]+/, '') // Remove any leading non-letter characters
               .trim();
-
-            // Ensure it starts with an action verb
-            if (cleaned && !/^[A-Z][a-z]+ed?\s/.test(cleaned)) {
-              return null;
-            }
 
             // Ensure first letter is capitalized
             if (cleaned) {
               cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
             }
 
-            // Count words and validate length
-            const wordCount = cleaned.split(/\s+/).length;
-            return (wordCount >= 3 && wordCount <= 7) ? cleaned : null;
+            return cleaned;
           })
-          .filter(Boolean); // Remove null values
+          .filter(line => line && line.length >= 10); // Remove empty or very short lines
 
         // Store suggestions with the job index
         setSuggestedResponsibilities(prev => ({
@@ -562,21 +556,22 @@ const ResumeEditor = () => {
 
   // Function to add a responsibility to the job description
   const addResponsibility = (responsibility, index) => {
-    const newWorkExperience = [...resumeData.workExperience];
-    const currentResponsibilities = newWorkExperience[index].responsibilities || '';
-    
-    // Add the new responsibility with a bullet point, ensuring it's clean
-    const cleanedResponsibility = responsibility
-      .replace(/^[•\-\+\*]+\s*/, '')
+    // Clean up the responsibility text
+    let cleanedResponsibility = responsibility
+      .replace(/\*\*/g, '') // Remove asterisks
       .trim();
-    
-    // Verify word count before adding
+
+    // Count words
     const wordCount = cleanedResponsibility.split(/\s+/).length;
     if (wordCount > 7) {
       alert('Responsibility is too long. Please keep it to 7 words or less.');
       return;
     }
+
+    const newWorkExperience = [...resumeData.workExperience];
+    const currentResponsibilities = newWorkExperience[index].responsibilities || '';
     
+    // Add the new responsibility with a bullet point
     newWorkExperience[index].responsibilities = currentResponsibilities
       ? `${currentResponsibilities}\n• ${cleanedResponsibility}`
       : `• ${cleanedResponsibility}`;
@@ -599,157 +594,6 @@ const ResumeEditor = () => {
         <div className="bg-white rounded-lg shadow-lg">
           <div className="p-6 border-b border-gray-200">
             <h1 className="text-2xl font-bold text-gray-900">Resume Input Form</h1>
-          </div>
-
-          {/* Skills Section */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900">Skills</h2>
-              <div className="flex flex-wrap gap-2">
-                {resumeData.skills.map((skill, index) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-[#1a237e]/10 text-[#1a237e] rounded-full text-sm flex items-center"
-                  >
-                    {skill}
-                    <button
-                      type="button"
-                      className="ml-2 text-[#1a237e] hover:text-[#1a237e]/70"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        removeSkill(skill);
-                      }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
-                  placeholder="Type a skill and press Enter"
-                  value={skillInput}
-                  onChange={handleSkillInputChange}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && skillInput.trim()) {
-                      e.preventDefault();
-                      addSkill(skillInput.trim());
-                      setSkillInput('');
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90 flex items-center space-x-2"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleAIEnhanceSkills();
-                  }}
-                  disabled={suggestedSkills.includes('Loading...')}
-                >
-                  {suggestedSkills.includes('Loading...') ? (
-                    <>
-                      <span className="animate-spin">↻</span>
-                      <span>Loading...</span>
-                    </>
-                  ) : (
-                    'Enhance Skills with AI'
-                  )}
-                </button>
-              </div>
-              {/* Display AI Suggested Skills */}
-              {suggestedSkills.length > 0 && !suggestedSkills.includes('Loading...') && (
-                <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">AI Suggested Skills:</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {suggestedSkills.map((skill, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          addSkill(skill);
-                          setSuggestedSkills(prev => prev.filter(s => s !== skill));
-                        }}
-                        className="px-3 py-1 bg-white border border-green-500 text-green-700 rounded-full text-sm hover:bg-green-100 transition-colors flex items-center space-x-1"
-                      >
-                        <span>+</span>
-                        <span>{skill}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Certifications Section - Moved outside form */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900">Certifications</h2>
-              <div className="flex flex-wrap gap-2">
-                {resumeData.certifications.map((cert, index) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-[#1a237e]/10 text-[#1a237e] rounded-full text-sm flex items-center"
-                  >
-                    {cert}
-                    <button
-                      type="button"
-                      className="ml-2 text-[#1a237e] hover:text-[#1a237e]/70"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setResumeData(prev => ({
-                          ...prev,
-                          certifications: prev.certifications.filter((_, i) => i !== index)
-                        }));
-                      }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
-                  placeholder="Add Certification"
-                  value={certInput}
-                  onChange={(e) => setCertInput(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && certInput.trim()) {
-                      e.preventDefault();
-                      if (!resumeData.certifications.includes(certInput.trim())) {
-                        setResumeData(prev => ({
-                          ...prev,
-                          certifications: [...prev.certifications, certInput.trim()]
-                        }));
-                        setCertInput('');
-                      }
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (certInput.trim() && !resumeData.certifications.includes(certInput.trim())) {
-                      setResumeData(prev => ({
-                        ...prev,
-                        certifications: [...prev.certifications, certInput.trim()]
-                      }));
-                      setCertInput('');
-                    }
-                  }}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
           </div>
 
           <form 
@@ -777,50 +621,80 @@ const ResumeEditor = () => {
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900">Personal Information</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  name="name"
-                  className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
-                  placeholder="Full Name"
-                  value={resumeData.name}
-                  onChange={handleChange}
-                  required
-                />
-                <input
-                  type="email"
-                  name="email"
-                  className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
-                  placeholder="Email"
-                  value={resumeData.email}
-                  onChange={handleChange}
-                  required
-                />
-                <input
-                  type="tel"
-                  name="contact"
-                  className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
-                  placeholder="Phone Number"
-                  value={resumeData.contact}
-                  onChange={handleChange}
-                  required
-                />
-                <div className="flex space-x-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Name <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    name="linkedin"
-                    className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
-                    placeholder="LinkedIn URL"
-                    value={resumeData.linkedin}
+                    name="name"
+                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent ${
+                      !resumeData.name ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter your full name"
+                    value={resumeData.name}
                     onChange={handleChange}
+                    required
                   />
-                  <button
-                    type="button"
-                    className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90"
-                  >
-                    Fill From LinkedIn
-                  </button>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent ${
+                      !resumeData.email ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter your email"
+                    value={resumeData.email}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="contact"
+                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent ${
+                      !resumeData.contact ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter your phone number"
+                    value={resumeData.contact}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    LinkedIn URL
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      name="linkedin"
+                      className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                      placeholder="Your LinkedIn profile URL"
+                      value={resumeData.linkedin}
+                      onChange={handleChange}
+                    />
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90"
+                    >
+                      Fill From LinkedIn
+                    </button>
+                  </div>
                 </div>
               </div>
+              {/* Required Fields Notice */}
+              <p className="text-sm text-gray-500 mt-2">
+                Fields marked with <span className="text-red-500">*</span> are required
+              </p>
             </div>
 
             {/* Work Experience */}
@@ -900,17 +774,30 @@ const ResumeEditor = () => {
                       <div className="mt-4 p-4 bg-green-50 rounded-lg">
                         <h3 className="text-lg font-medium text-gray-900 mb-2">Suggested Responsibilities:</h3>
                         <div className="flex flex-wrap gap-2">
-                          {suggestedResponsibilities[index].map((responsibility, respIndex) => (
-                            <button
-                              key={respIndex}
-                              type="button"
-                              onClick={() => addResponsibility(responsibility, index)}
-                              className="px-3 py-1 bg-white border border-green-500 text-green-700 rounded-full text-sm hover:bg-green-100 transition-colors flex items-center space-x-1"
-                            >
-                              <span>+</span>
-                              <span>{responsibility}</span>
-                            </button>
-                          ))}
+                          {suggestedResponsibilities[index]
+                            .filter(responsibility => {
+                              // Additional frontend filtering
+                              const cleaned = responsibility.replace(/\*\*/g, '').trim();
+                              const wordCount = cleaned.split(/\s+/).length;
+                              return (
+                                wordCount <= 7 && // Enforce 7-word limit
+                                cleaned.length >= 10 && // Ensure minimum length
+                                !cleaned.toLowerCase().includes('example') &&
+                                !cleaned.toLowerCase().includes('should be') &&
+                                !cleaned.includes('*') // Remove any remaining asterisks
+                              );
+                            })
+                            .map((responsibility, respIndex) => (
+                              <button
+                                key={respIndex}
+                                type="button"
+                                onClick={() => addResponsibility(responsibility, index)}
+                                className="px-3 py-1 bg-white border border-green-500 text-green-700 rounded-full text-sm hover:bg-green-100 transition-colors flex items-center space-x-1"
+                              >
+                                <span>+</span>
+                                <span>{responsibility.replace(/\*\*/g, '')}</span>
+                              </button>
+                            ))}
                         </div>
                       </div>
                     )}
@@ -998,6 +885,161 @@ const ResumeEditor = () => {
               >
                 + Add Education
               </button>
+            </div>
+
+            {/* Skills Section - Moved here */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-gray-900">Skills</h2>
+              <div className="flex flex-wrap gap-2">
+                {resumeData.skills.map((skill, index) => (
+                  <span
+                    key={index}
+                    className="px-3 py-1 bg-[#1a237e]/10 text-[#1a237e] rounded-full text-sm flex items-center"
+                  >
+                    {skill}
+                    <button
+                      type="button"
+                      className="ml-2 text-[#1a237e] hover:text-[#1a237e]/70"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        removeSkill(skill);
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                  placeholder="Type a skill and press Enter"
+                  value={skillInput}
+                  onChange={handleSkillInputChange}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && skillInput.trim()) {
+                      e.preventDefault();
+                      addSkill(skillInput.trim());
+                      setSkillInput('');
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90 flex items-center space-x-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleAIEnhanceSkills();
+                  }}
+                  disabled={suggestedSkills.includes('Loading...')}
+                >
+                  {suggestedSkills.includes('Loading...') ? (
+                    <>
+                      <span className="animate-spin">↻</span>
+                      <span>Loading...</span>
+                    </>
+                  ) : (
+                    'Enhance Skills with AI'
+                  )}
+                </button>
+              </div>
+              {/* Display AI Suggested Skills */}
+              {suggestedSkills.length > 0 && !suggestedSkills.includes('Loading...') && (
+                <div className="mt-4 p-4 bg-green-50 rounded-lg">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">AI Suggested Skills:</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedSkills.map((skill, index) => {
+                      // Clean the skill string by removing numbers, periods, and special characters
+                      const cleanedSkill = skill
+                        .replace(/^\d+\.\s*/, '') // Remove numbers and periods from start
+                        .replace(/[\[\]"']/g, '') // Remove quotes and brackets
+                        .trim();
+                      
+                      return (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            addSkill(cleanedSkill);
+                            setSuggestedSkills(prev => prev.filter(s => s !== skill));
+                          }}
+                          className="px-3 py-1 bg-white border border-green-500 text-green-700 rounded-full text-sm hover:bg-green-100 transition-colors flex items-center space-x-1"
+                        >
+                          <span>+</span>
+                          <span>{cleanedSkill}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Certifications Section - Moved here */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-gray-900">Certifications</h2>
+              <div className="flex flex-wrap gap-2">
+                {resumeData.certifications.map((cert, index) => (
+                  <span
+                    key={index}
+                    className="px-3 py-1 bg-[#1a237e]/10 text-[#1a237e] rounded-full text-sm flex items-center"
+                  >
+                    {cert}
+                    <button
+                      type="button"
+                      className="ml-2 text-[#1a237e] hover:text-[#1a237e]/70"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setResumeData(prev => ({
+                          ...prev,
+                          certifications: prev.certifications.filter((_, i) => i !== index)
+                        }));
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                  placeholder="Add Certification"
+                  value={certInput}
+                  onChange={(e) => setCertInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && certInput.trim()) {
+                      e.preventDefault();
+                      if (!resumeData.certifications.includes(certInput.trim())) {
+                        setResumeData(prev => ({
+                          ...prev,
+                          certifications: [...prev.certifications, certInput.trim()]
+                        }));
+                        setCertInput('');
+                      }
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (certInput.trim() && !resumeData.certifications.includes(certInput.trim())) {
+                      setResumeData(prev => ({
+                        ...prev,
+                        certifications: [...prev.certifications, certInput.trim()]
+                      }));
+                      setCertInput('');
+                    }
+                  }}
+                >
+                  Add
+                </button>
+              </div>
             </div>
 
             {/* Summary Section */}

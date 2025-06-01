@@ -1,116 +1,203 @@
 import React from 'react';
 
-const DefaultTemplate = ({ resume }) => {
+const DefaultTemplate = ({ resume, primaryColor = '#1A237E' }) => {
+  // Provide fallback values if resume is null or undefined
+  const resumeData = resume || {};
+  
+  const headerStyle = {
+    color: primaryColor
+  };
+
+  const borderStyle = {
+    borderColor: primaryColor
+  };
+
   return (
-    <div className="max-w-4xl mx-auto bg-white" style={{ fontFamily: 'Arial, sans-serif' }}>
-      {/* Header Section with blue background */}
-      <div className="bg-[#1A237E] text-white p-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold mb-2">{resume.name}</h1>
-          <div>
-            <p>{resume.email} | {resume.contact}</p>
-            {resume.linkedin && (
-              <p>
-                <a href={resume.linkedin} className="text-white hover:text-gray-200">{resume.linkedin}</a>
-              </p>
-            )}
-          </div>
+    <div className="p-8 max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold mb-2">{resumeData.name || 'Your Name'}</h1>
+        <div className="text-gray-600 space-x-2">
+          <span>{resumeData.email || 'your.email@example.com'}</span>
+          <span>|</span>
+          <span>{resumeData.contact || '+1 (555) 123-4567'}</span>
+          {resumeData.linkedin && (
+            <>
+              <span>|</span>
+              <span>{resumeData.linkedin}</span>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="p-8">
-        {/* Professional Summary */}
-        {resume.summary && (
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-[#1A237E] border-b-2 border-[#1A237E] pb-2 mb-3">Professional Summary</h2>
-            <p className="text-gray-700 leading-relaxed">{resume.summary}</p>
-          </div>
-        )}
+      {/* Professional Summary */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold mb-3" style={headerStyle}>Professional Summary</h2>
+        <div className="border-b-2 mb-4" style={borderStyle}></div>
+        <p className="text-gray-700 leading-relaxed">
+          {resumeData.summary || 'A dedicated professional with extensive experience in delivering high-quality results. Passionate about continuous learning and contributing to team success.'}
+        </p>
+      </div>
 
-        {/* Work Experience */}
-        {resume.workExperience && resume.workExperience.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-[#1A237E] border-b-2 border-[#1A237E] pb-2 mb-3">Work Experience</h2>
-            {resume.workExperience.map((exp, index) => (
-              <div key={index} className="mb-6">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#1A237E]">{exp.title}</h3>
-                    <p className="text-[#1A237E]">{exp.company}</p>
-                  </div>
-                  <span className="text-gray-600">{exp.duration}</span>
-                </div>
-                <div className="text-gray-700 pl-4">
-                  {exp.responsibilities.split('\n').map((resp, idx) => (
-                    <p key={idx} className="mb-1 flex items-start">
-                      <span className="mr-2">•</span>
-                      {resp}
-                    </p>
-                  ))}
-                </div>
+      {/* Work Experience */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold mb-3" style={headerStyle}>Work Experience</h2>
+        <div className="border-b-2 mb-4" style={borderStyle}></div>
+        {resumeData.workExperience && resumeData.workExperience.length > 0 ? (
+          resumeData.workExperience.map((exp, index) => (
+            <div key={index} className="mb-6">
+              <div className="flex justify-between items-baseline mb-2">
+                <h3 className="text-lg font-medium" style={headerStyle}>{exp.title || 'Job Title'}</h3>
+                <span className="text-gray-600">{exp.startDate || '2020'} - {exp.endDate || 'Present'}</span>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Education */}
-        {resume.education && resume.education.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-[#1A237E] border-b-2 border-[#1A237E] pb-2 mb-3">Education</h2>
-            {resume.education.map((edu, index) => (
-              <div key={index} className="mb-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#1A237E]">{edu.degree}</h3>
-                    <p className="text-[#1A237E]">{edu.university}</p>
-                  </div>
-                  <span className="text-gray-600">{edu.year}</span>
-                </div>
+              <div className="text-gray-700 mb-2">{exp.company || 'Company Name'}</div>
+              <div className="text-gray-600">
+                {exp.responsibilities ? (
+                  exp.responsibilities.split('\n').map((resp, idx) => (
+                    <p key={idx} className="mb-1">{resp.trim()}</p>
+                  ))
+                ) : (
+                  <p className="mb-1">Responsible for various duties and achievements in this role.</p>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Skills */}
-        {resume.skills && resume.skills.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-[#1A237E] border-b-2 border-[#1A237E] pb-2 mb-3">Skills</h2>
-            <div className="flex flex-wrap gap-2">
-              {resume.skills.map((skill, index) => (
-                <span
-                  key={index}
-                  className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
-                >
-                  {skill}
-                </span>
-              ))}
             </div>
-          </div>
-        )}
-
-        {/* Certifications */}
-        {resume.certifications && resume.certifications.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-[#1A237E] border-b-2 border-[#1A237E] pb-2 mb-3">Certifications</h2>
-            <ul className="list-none pl-4 text-gray-700">
-              {resume.certifications.map((cert, index) => (
-                <li key={index} className="mb-1 flex items-start">
-                  <span className="mr-2">•</span>
-                  {cert}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* References */}
-        {resume.references && (
-          <div>
-            <h2 className="text-xl font-bold text-[#1A237E] border-b-2 border-[#1A237E] pb-2 mb-3">References</h2>
-            <p className="text-gray-700">{resume.references}</p>
-          </div>
+          ))
+        ) : (
+          <>
+            <div className="mb-6">
+              <div className="flex justify-between items-baseline mb-2">
+                <h3 className="text-lg font-medium" style={headerStyle}>Senior Software Developer</h3>
+                <span className="text-gray-600">2022 - Present</span>
+              </div>
+              <div className="text-gray-700 mb-2">Tech Innovations Ltd.</div>
+              <div className="text-gray-600">
+                <p className="mb-1">• Led development of multiple full-stack web applications using React and Node.js</p>
+                <p className="mb-1">• Collaborated with cross-functional teams to deliver projects 20% ahead of schedule</p>
+                <p className="mb-1">• Implemented best practices and coding standards, reducing bug reports by 35%</p>
+                <p className="mb-1">• Mentored junior developers and conducted code reviews</p>
+              </div>
+            </div>
+            <div className="mb-6">
+              <div className="flex justify-between items-baseline mb-2">
+                <h3 className="text-lg font-medium" style={headerStyle}>Frontend Developer</h3>
+                <span className="text-gray-600">2020 - 2022</span>
+              </div>
+              <div className="text-gray-700 mb-2">Digital Solutions Inc.</div>
+              <div className="text-gray-600">
+                <p className="mb-1">• Developed responsive web interfaces using HTML, CSS, and JavaScript</p>
+                <p className="mb-1">• Optimized application performance, improving load times by 40%</p>
+                <p className="mb-1">• Worked closely with UX/UI designers to implement pixel-perfect designs</p>
+                <p className="mb-1">• Maintained and updated legacy codebases</p>
+              </div>
+            </div>
+            <div className="mb-6">
+              <div className="flex justify-between items-baseline mb-2">
+                <h3 className="text-lg font-medium" style={headerStyle}>Junior Developer</h3>
+                <span className="text-gray-600">2019 - 2020</span>
+              </div>
+              <div className="text-gray-700 mb-2">StartUp Ventures</div>
+              <div className="text-gray-600">
+                <p className="mb-1">• Assisted in developing web applications and mobile apps</p>
+                <p className="mb-1">• Participated in agile development methodologies and daily standups</p>
+                <p className="mb-1">• Gained experience with various programming languages and frameworks</p>
+              </div>
+            </div>
+          </>
         )}
       </div>
+
+      {/* Skills */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold mb-3" style={headerStyle}>Skills</h2>
+        <div className="border-b-2 mb-4" style={borderStyle}></div>
+        <div className="flex flex-wrap gap-2">
+          {resumeData.skills && resumeData.skills.length > 0 ? (
+            resumeData.skills.map((skill, index) => (
+              <span
+                key={index}
+                className="px-3 py-1 rounded-full text-white text-sm"
+                style={{ backgroundColor: primaryColor }}
+              >
+                {skill}
+              </span>
+            ))
+          ) : (
+            ['JavaScript', 'React', 'Node.js', 'Python', 'SQL', 'HTML/CSS', 'Git', 'AWS', 'MongoDB', 'Express.js', 'TypeScript', 'Vue.js', 'Docker', 'REST APIs', 'Agile/Scrum'].map((skill, index) => (
+              <span
+                key={index}
+                className="px-3 py-1 rounded-full text-white text-sm"
+                style={{ backgroundColor: primaryColor }}
+              >
+                {skill}
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Education */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold mb-3" style={headerStyle}>Education</h2>
+        <div className="border-b-2 mb-4" style={borderStyle}></div>
+        {resumeData.education && resumeData.education.length > 0 ? (
+          resumeData.education.map((edu, index) => (
+            <div key={index} className="mb-4">
+              <div className="flex justify-between items-baseline">
+                <div>
+                  <h3 className="text-lg font-medium" style={headerStyle}>{edu.degree || 'Bachelor of Science'}</h3>
+                  <div className="text-gray-700">{edu.university || 'University Name'}</div>
+                </div>
+                <div className="text-gray-600">{edu.year || '2020'}</div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <>
+            <div className="mb-4">
+              <div className="flex justify-between items-baseline">
+                <div>
+                  <h3 className="text-lg font-medium" style={headerStyle}>Bachelor of Science in Computer Science</h3>
+                  <div className="text-gray-700">University of Technology</div>
+                  <div className="text-gray-600 text-sm">GPA: 3.8/4.0 • Magna Cum Laude</div>
+                </div>
+                <div className="text-gray-600">2015 - 2019</div>
+              </div>
+            </div>
+            <div className="mb-4">
+              <div className="flex justify-between items-baseline">
+                <div>
+                  <h3 className="text-lg font-medium" style={headerStyle}>Relevant Coursework</h3>
+                  <div className="text-gray-600 text-sm">Data Structures, Algorithms, Software Engineering, Database Systems, Web Development</div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Certifications */}
+      {resumeData.certifications && resumeData.certifications.length > 0 ? (
+        <div>
+          <h2 className="text-2xl font-semibold mb-3" style={headerStyle}>Certifications</h2>
+          <div className="border-b-2 mb-4" style={borderStyle}></div>
+          <ul className="list-disc list-inside text-gray-700">
+            {resumeData.certifications.map((cert, index) => (
+              <li key={index} className="mb-2">{cert}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div>
+          <h2 className="text-2xl font-semibold mb-3" style={headerStyle}>Certifications</h2>
+          <div className="border-b-2 mb-4" style={borderStyle}></div>
+          <ul className="list-disc list-inside text-gray-700">
+            <li className="mb-2">AWS Certified Developer - Associate (2023)</li>
+            <li className="mb-2">MongoDB Certified Developer (2022)</li>
+            <li className="mb-2">Google Analytics Certified (2022)</li>
+            <li className="mb-2">Scrum Master Certification (2021)</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

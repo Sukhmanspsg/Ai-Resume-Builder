@@ -1,25 +1,53 @@
 const db = require('../config/db');
 
-// ===========================================
-// SAVE FEEDBACK ENTRY
-// ===========================================
-exports.saveFeedback = (user_id, resume_id, message, callback) => {
-  const sql = 'INSERT INTO feedback (user_id, resume_id, message) VALUES (?, ?, ?)';
-  
-  // Store AI-generated feedback for a specific resume and user
-  db.query(sql, [user_id, resume_id, message], callback);
-};
+class FeedbackModel {
+  static createFeedback(userId, resumeId, rating, comment, callback) {
+    const query = 'INSERT INTO feedback (user_id, resume_id, rating, comment) VALUES (?, ?, ?, ?)';
+    db.query(query, [userId, resumeId, rating, comment], callback);
+  }
 
-// ===========================================
-// GET MOST RECENT FEEDBACK FOR A RESUME
-// ===========================================
-exports.getLatestByResumeId = (resume_id, callback) => {
-  const sql = 'SELECT * FROM feedback WHERE resume_id = ? ORDER BY id DESC LIMIT 1';
+  static getAllFeedback(callback) {
+    const query = `
+      SELECT 
+        f.*,
+        u.name as user_name,
+        u.email as user_email,
+        r.title as resume_title
+      FROM feedback f
+      LEFT JOIN users u ON f.user_id = u.id
+      LEFT JOIN resumes r ON f.resume_id = r.id
+      ORDER BY f.created_at DESC
+    `;
+    db.query(query, callback);
+  }
 
-  // Fetch the latest feedback for a given resume (most recent first)
-  db.query(sql, [resume_id], (err, result) => {
-    if (err) return callback(err, null);
-    if (result.length === 0) return callback(null, null); // No feedback found
-    return callback(null, result[0]); // Return latest feedback row
-  });
-};
+  static getFeedbackByResumeId(resumeId, callback) {
+    const query = `
+      SELECT 
+        f.*,
+        u.name as user_name
+      FROM feedback f
+      LEFT JOIN users u ON f.user_id = u.id
+      WHERE f.resume_id = ?
+      ORDER BY f.created_at DESC
+    `;
+    db.query(query, [resumeId], callback);
+  }
+
+  static getFeedbackStats(callback) {
+    const query = `
+      SELECT 
+        COUNT(*) as total_feedback,
+        AVG(rating) as average_rating,
+        COUNT(CASE WHEN rating = 5 THEN 1 END) as five_star,
+        COUNT(CASE WHEN rating = 4 THEN 1 END) as four_star,
+        COUNT(CASE WHEN rating = 3 THEN 1 END) as three_star,
+        COUNT(CASE WHEN rating = 2 THEN 1 END) as two_star,
+        COUNT(CASE WHEN rating = 1 THEN 1 END) as one_star
+      FROM feedback
+    `;
+    db.query(query, callback);
+  }
+}
+
+module.exports = FeedbackModel;

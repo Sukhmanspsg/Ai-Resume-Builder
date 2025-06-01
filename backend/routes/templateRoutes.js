@@ -10,6 +10,13 @@ const templateController = require('../controllers/templateController');
 router.get('/', templateController.getAllTemplates);
 
 // ===============================================
+// @route   GET /api/templates/render/:id?resumeId=xx
+// @desc    Render resume with data into selected template
+// @access  Public
+// ===============================================
+router.get('/render/:id', templateController.renderResumeTemplate);
+
+// ===============================================
 // @route   GET /api/templates/:id
 // @desc    Get a specific template by ID
 // @access  Public
@@ -37,22 +44,7 @@ router.put('/:id', templateController.updateTemplate);
 // ===============================================
 router.delete('/:id', templateController.deleteTemplate);
 
-// ===============================================
-// @route   GET /api/templates/render/:id?resumeId=xx
-// @desc    Render resume with data into selected template
-// @access  Public
-// ===============================================
-router.get('/render/:id', templateController.renderResumeTemplate);
-
-// ===============================================
-// @route   POST /api/templates/generate-with-ai
-// @desc    Generate a resume template using AI (Groq)
-// @access  Admin/Editor
-// ===============================================
-router.post('/generate-with-ai', templateController.generateTemplateWithAI);
-
-// ===============================================
-// @TODO: Enable when implemented
-// router.post('/generate-cover-letter', templateController.generateCoverLetter);
+// Generate AI Template
+router.post('/generate', templateController.generateTemplate);
 
 module.exports = router;
