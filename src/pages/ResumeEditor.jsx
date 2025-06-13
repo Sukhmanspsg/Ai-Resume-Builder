@@ -14,6 +14,7 @@ const ResumeEditor = () => {
   // Get initial data from location state or local storage
   const getInitialData = () => {
     const savedData = localStorage.getItem('resumeData');
+    const uploadedData = localStorage.getItem('uploadedResume');
     const locationData = location.state || {};
     
     // Default empty state
@@ -23,6 +24,7 @@ const ResumeEditor = () => {
       email: '',
       contact: '',
       linkedin: '',
+      photo: '', // Add photo field
       workExperience: [{ 
         title: '', 
         company: '', 
@@ -40,16 +42,67 @@ const ResumeEditor = () => {
       references: 'Available upon request'
     };
     
+    // If we have uploaded resume data, use that and clear it
+    if (uploadedData) {
+      try {
+        const parsedUploadedData = JSON.parse(uploadedData);
+        console.log('📄 Using uploaded resume data:', parsedUploadedData);
+        
+        // Clear the uploaded data so it doesn't interfere with future sessions
+        localStorage.removeItem('uploadedResume');
+        
+        // Merge with default data to ensure all required fields exist
+        const mergedData = {
+          ...defaultData,
+          ...parsedUploadedData,
+          // Ensure arrays are properly initialized
+          workExperience: parsedUploadedData.workExperience?.length > 0 
+            ? parsedUploadedData.workExperience 
+            : defaultData.workExperience,
+          education: parsedUploadedData.education?.length > 0 
+            ? parsedUploadedData.education 
+            : defaultData.education,
+          skills: parsedUploadedData.skills && Array.isArray(parsedUploadedData.skills) ? parsedUploadedData.skills : defaultData.skills,
+          certifications: parsedUploadedData.certifications && Array.isArray(parsedUploadedData.certifications) ? parsedUploadedData.certifications : defaultData.certifications
+        };
+        
+        // Save the processed data to resumeData
+        localStorage.setItem('resumeData', JSON.stringify(mergedData));
+        return mergedData;
+      } catch (e) {
+        console.error('Error parsing uploaded resume data:', e);
+        localStorage.removeItem('uploadedResume');
+      }
+    }
+    
     // If we have data in location state (coming back from preview), use that
-    if (Object.keys(locationData).length > 0) {
+    if (Object.keys(locationData).length > 0 && !locationData.isUploadedResume) {
       const mergedData = {
         ...defaultData,
         ...locationData,
         // Ensure arrays are initialized even if they don't exist in locationData
         workExperience: locationData.workExperience || defaultData.workExperience,
         education: locationData.education || defaultData.education,
-        skills: locationData.skills || defaultData.skills,
-        certifications: locationData.certifications || defaultData.certifications
+        skills: locationData.skills && Array.isArray(locationData.skills) ? locationData.skills : defaultData.skills,
+        certifications: locationData.certifications && Array.isArray(locationData.certifications) ? locationData.certifications : defaultData.certifications
+      };
+      localStorage.setItem('resumeData', JSON.stringify(mergedData));
+      return mergedData;
+    }
+    
+    // If location state has uploaded resume data, use that
+    if (locationData.isUploadedResume) {
+      const mergedData = {
+        ...defaultData,
+        ...locationData,
+        workExperience: locationData.workExperience?.length > 0 
+          ? locationData.workExperience 
+          : defaultData.workExperience,
+        education: locationData.education?.length > 0 
+          ? locationData.education 
+          : defaultData.education,
+        skills: locationData.skills && Array.isArray(locationData.skills) ? locationData.skills : defaultData.skills,
+        certifications: locationData.certifications && Array.isArray(locationData.certifications) ? locationData.certifications : defaultData.certifications
       };
       localStorage.setItem('resumeData', JSON.stringify(mergedData));
       return mergedData;
@@ -71,8 +124,8 @@ const ResumeEditor = () => {
           // Ensure arrays are initialized even if they don't exist in saved data
           workExperience: parsedData.workExperience || defaultData.workExperience,
           education: parsedData.education || defaultData.education,
-          skills: parsedData.skills || defaultData.skills,
-          certifications: parsedData.certifications || defaultData.certifications
+          skills: parsedData.skills && Array.isArray(parsedData.skills) ? parsedData.skills : defaultData.skills,
+          certifications: parsedData.certifications && Array.isArray(parsedData.certifications) ? parsedData.certifications : defaultData.certifications
         };
       } catch (e) {
         console.error('Error parsing saved resume data:', e);
@@ -92,6 +145,40 @@ const ResumeEditor = () => {
   const [certInput, setCertInput] = useState('');
   const [enhancingJobIndex, setEnhancingJobIndex] = useState(null);
   const [suggestedResponsibilities, setSuggestedResponsibilities] = useState({});
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  
+  // Set default template on initial load
+  useEffect(() => {
+    if (!selectedTemplate) {
+      setSelectedTemplate('default'); // Default to Professional template
+    }
+  }, [selectedTemplate]);
+  
+  // Template configuration - define which templates support photos
+  const templateConfig = {
+    // React Component Templates (from TemplateGallery)
+    'default': { name: 'Professional', supportsPhoto: true },
+    'modern': { name: 'Modern', supportsPhoto: true },
+    'minimal': { name: 'Minimal', supportsPhoto: false }, // Text-focused, minimal design
+    
+    // Database Templates (common ones that might exist)
+    1: { name: 'Professional', supportsPhoto: true },
+    2: { name: 'Modern', supportsPhoto: true },
+    3: { name: 'Creative', supportsPhoto: true },
+    4: { name: 'Executive', supportsPhoto: true },
+    5: { name: 'Technical', supportsPhoto: false }, // Code-focused, minimal
+    6: { name: 'Academic', supportsPhoto: false }, // Traditional academic CV
+    7: { name: 'Minimal', supportsPhoto: false }, // Clean, text-only design
+    91: { name: 'Professional with Photo', supportsPhoto: true }, // New photo-supported template
+  };
+
+  // Helper function to check if current template supports photos
+  const doesTemplateSupportPhoto = () => {
+    if (!selectedTemplate) return true; // Default to showing photo option
+    const config = templateConfig[selectedTemplate];
+    return config ? config.supportsPhoto : true; // Default to true if template not found
+  };
 
   // Debounced ATS score calculation
   const debouncedATSScore = useCallback(
@@ -99,8 +186,16 @@ const ResumeEditor = () => {
       try {
         setIsCalculatingATS(true);
         // Calculate score locally instead of API call
-        const score = calculateATSScore(data);
-        setAtsScore(score);
+        const scoreResult = calculateATSScore(data);
+        
+        // Handle both old number format and new object format
+        if (typeof scoreResult === 'object' && scoreResult.score !== undefined) {
+          setAtsScore(scoreResult.score);
+        } else if (typeof scoreResult === 'number') {
+          setAtsScore(scoreResult);
+        } else {
+          setAtsScore(0);
+        }
       } catch (err) {
         console.error('❌ ATS scoring failed', err);
         setAtsScore(0);
@@ -257,7 +352,10 @@ const ResumeEditor = () => {
           navigate('/resume-preview', {
             state: {
               ...resumeData,
-              id: resumeId
+              id: resumeId,
+              selectedTemplate: selectedTemplate || 1, // Use selected template or default
+              selectedColor: '#2563eb', // Default blue color
+              useDatabase: typeof selectedTemplate === 'number' // Use database for numeric IDs, React components for string IDs
             }
           });
         }, 1500);
@@ -282,7 +380,15 @@ const ResumeEditor = () => {
   // Debounced save function for auto-saving changes
   const debouncedSave = useCallback(
     debounce(async (data) => {
-      await saveToDatabase(data);
+      // Only auto-save if required fields are present to avoid validation errors
+      if (data.name?.trim() && data.email?.trim() && data.contact?.trim()) {
+        try {
+          await saveToDatabase(data);
+        } catch (error) {
+          // Silently handle auto-save errors to avoid disrupting user experience
+          console.warn('Auto-save failed:', error.message);
+        }
+      }
     }, 2000),
     [resumeId]
   );
@@ -554,6 +660,52 @@ const ResumeEditor = () => {
     }
   };
 
+  // Function to handle photo upload
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Please upload a valid image file (JPEG, PNG, or GIF)');
+        return;
+      }
+
+      // Validate file size (2MB limit)
+      const maxSize = 2 * 1024 * 1024; // 2MB
+      if (file.size > maxSize) {
+        alert('Image size should be less than 2MB');
+        return;
+      }
+
+      setPhotoUploading(true);
+
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64String = event.target.result;
+        setResumeData(prev => ({
+          ...prev,
+          photo: base64String
+        }));
+        setPhotoUploading(false);
+      };
+      reader.onerror = () => {
+        alert('Error reading file. Please try again.');
+        setPhotoUploading(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Function to remove photo
+  const removePhoto = () => {
+    setResumeData(prev => ({
+      ...prev,
+      photo: ''
+    }));
+  };
+
   // Function to add a responsibility to the job description
   const addResponsibility = (responsibility, index) => {
     // Clean up the responsibility text
@@ -589,12 +741,14 @@ const ResumeEditor = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-lg shadow-lg">
-          <div className="p-6 border-b border-gray-200">
-            <h1 className="text-2xl font-bold text-gray-900">Resume Input Form</h1>
-          </div>
+    <div className="min-h-screen bg-gray-50">
+      <div className="py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-lg shadow-lg">
+            <div className="p-6 border-b border-gray-200">
+              <h1 className="text-3xl font-bold text-gray-900">Resume Builder</h1>
+              <p className="text-gray-600 mt-2">Fill in your information to create a professional resume</p>
+            </div>
 
           <form 
             onSubmit={(e) => {
@@ -609,7 +763,7 @@ const ResumeEditor = () => {
               <input
                 type="text"
                 name="title"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter resume title"
                 value={resumeData.title}
                 onChange={handleChange}
@@ -620,6 +774,7 @@ const ResumeEditor = () => {
             {/* Personal Information */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900">Personal Information</h2>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -628,7 +783,7 @@ const ResumeEditor = () => {
                   <input
                     type="text"
                     name="name"
-                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent ${
+                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       !resumeData.name ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="Enter your full name"
@@ -644,7 +799,7 @@ const ResumeEditor = () => {
                   <input
                     type="email"
                     name="email"
-                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent ${
+                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       !resumeData.email ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="Enter your email"
@@ -660,7 +815,7 @@ const ResumeEditor = () => {
                   <input
                     type="tel"
                     name="contact"
-                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent ${
+                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       !resumeData.contact ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="Enter your phone number"
@@ -677,14 +832,14 @@ const ResumeEditor = () => {
                     <input
                       type="text"
                       name="linkedin"
-                      className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                      className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Your LinkedIn profile URL"
                       value={resumeData.linkedin}
                       onChange={handleChange}
                     />
                     <button
                       type="button"
-                      className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                     >
                       Fill From LinkedIn
                     </button>
@@ -701,10 +856,10 @@ const ResumeEditor = () => {
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900">Work Experience</h2>
               {resumeData.workExperience.map((exp, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border border-gray-200 rounded-lg">
+                <div key={index} className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
                   <input
                     type="text"
-                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     placeholder="Job Title"
                     value={exp.title}
                     onChange={(e) => {
@@ -715,7 +870,7 @@ const ResumeEditor = () => {
                   />
                   <input
                     type="text"
-                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     placeholder="Company"
                     value={exp.company}
                     onChange={(e) => {
@@ -726,7 +881,7 @@ const ResumeEditor = () => {
                   />
                   <input
                     type="text"
-                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     placeholder="Period (e.g., 2020 to 2024)"
                     value={exp.duration}
                     onChange={(e) => {
@@ -740,7 +895,7 @@ const ResumeEditor = () => {
                       <label className="text-sm font-medium text-gray-700">Job Description</label>
                       <button
                         type="button"
-                        className="px-3 py-1 text-sm bg-[#1a237e] text-white rounded hover:bg-[#1a237e]/90 transition-colors flex items-center space-x-1 disabled:opacity-50"
+                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center space-x-1 disabled:opacity-50"
                         onClick={() => handleEnhanceJobDescription(index)}
                         disabled={enhancingJobIndex === index}
                       >
@@ -758,7 +913,7 @@ const ResumeEditor = () => {
                       </button>
                     </div>
                     <textarea
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Describe your responsibilities and achievements..."
                       rows="4"
                       value={exp.responsibilities}
@@ -782,67 +937,74 @@ const ResumeEditor = () => {
                               return (
                                 wordCount <= 7 && // Enforce 7-word limit
                                 cleaned.length >= 10 && // Ensure minimum length
-                                !cleaned.toLowerCase().includes('example') &&
-                                !cleaned.toLowerCase().includes('should be') &&
-                                !cleaned.includes('*') // Remove any remaining asterisks
+                                !cleaned.toLowerCase().includes('bullet') && // Exclude meta instructions
+                                !cleaned.toLowerCase().includes('experience') && // Focus on specific tasks
+                                cleaned.includes(' ') // Must contain at least one space
                               );
                             })
-                            .map((responsibility, respIndex) => (
-                              <button
-                                key={respIndex}
-                                type="button"
-                                onClick={() => addResponsibility(responsibility, index)}
-                                className="px-3 py-1 bg-white border border-green-500 text-green-700 rounded-full text-sm hover:bg-green-100 transition-colors flex items-center space-x-1"
-                              >
-                                <span>+</span>
-                                <span>{responsibility.replace(/\*\*/g, '')}</span>
-                              </button>
-                            ))}
+                            .slice(0, 5) // Limit to 5 suggestions
+                            .map((responsibility, suggIndex) => {
+                              const cleanedResponsibility = responsibility.replace(/\*\*/g, '').trim();
+                              return (
+                                <button
+                                  key={suggIndex}
+                                  type="button"
+                                  onClick={() => addResponsibility(responsibility, index)}
+                                  className="px-3 py-1 bg-white border border-green-500 text-green-700 rounded-full text-sm hover:bg-green-100 transition-colors flex items-center space-x-1"
+                                >
+                                  <span>+</span>
+                                  <span>{cleanedResponsibility}</span>
+                                </button>
+                              );
+                            })
+                          }
                         </div>
                       </div>
                     )}
-                    
-                    {enhancingJobIndex === index && (!suggestedResponsibilities[index] || suggestedResponsibilities[index].length === 0) && (
-                      <div className="text-sm text-gray-500 animate-pulse">
-                        Generating suggestions...
-                      </div>
-                    )}
                   </div>
-                  {index > 0 && (
+                  
+                  {/* Add/Remove Experience Entry */}
+                  <div className="md:col-span-2 flex justify-between items-center">
                     <button
                       type="button"
-                      className="md:col-span-2 px-3 py-1 text-red-600 hover:text-red-700 text-sm flex items-center justify-center space-x-1"
+                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                       onClick={() => {
-                        const newExp = resumeData.workExperience.filter((_, i) => i !== index);
-                        setResumeData({ ...resumeData, workExperience: newExp });
+                        if (resumeData.workExperience.length > 1) {
+                          setResumeData({
+                            ...resumeData,
+                            workExperience: resumeData.workExperience.filter((_, i) => i !== index)
+                          });
+                        }
+                      }}
+                      disabled={resumeData.workExperience.length === 1}
+                    >
+                      Remove Experience
+                    </button>
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                      onClick={() => {
+                        setResumeData({
+                          ...resumeData,
+                          workExperience: [...resumeData.workExperience, { title: '', company: '', duration: '', responsibilities: '' }]
+                        });
                       }}
                     >
-                      <span>×</span>
-                      <span>Remove Position</span>
+                      Add Experience
                     </button>
-                  )}
+                  </div>
                 </div>
               ))}
-              <button
-                type="button"
-                className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-[#1a237e] hover:text-[#1a237e] transition-colors"
-                onClick={() => setResumeData({
-                  ...resumeData,
-                  workExperience: [...resumeData.workExperience, { title: '', company: '', duration: '', responsibilities: '' }]
-                })}
-              >
-                + Add Work Experience
-              </button>
             </div>
 
             {/* Education */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900">Education</h2>
               {resumeData.education.map((edu, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border border-gray-200 rounded-lg">
+                <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
                   <input
                     type="text"
-                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     placeholder="Degree"
                     value={edu.degree}
                     onChange={(e) => {
@@ -853,8 +1015,8 @@ const ResumeEditor = () => {
                   />
                   <input
                     type="text"
-                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
-                    placeholder="Institution"
+                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    placeholder="University"
                     value={edu.university}
                     onChange={(e) => {
                       const newEdu = [...resumeData.education];
@@ -864,7 +1026,7 @@ const ResumeEditor = () => {
                   />
                   <input
                     type="text"
-                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     placeholder="Year"
                     value={edu.year}
                     onChange={(e) => {
@@ -873,37 +1035,102 @@ const ResumeEditor = () => {
                       setResumeData({ ...resumeData, education: newEdu });
                     }}
                   />
+                  
+                  {/* Add/Remove Education Entry */}
+                  <div className="md:col-span-3 flex justify-between items-center">
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                      onClick={() => {
+                        if (resumeData.education.length > 1) {
+                          setResumeData({
+                            ...resumeData,
+                            education: resumeData.education.filter((_, i) => i !== index)
+                          });
+                        }
+                      }}
+                      disabled={resumeData.education.length === 1}
+                    >
+                      Remove Education
+                    </button>
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                      onClick={() => {
+                        setResumeData({
+                          ...resumeData,
+                          education: [...resumeData.education, { degree: '', university: '', year: '' }]
+                        });
+                      }}
+                    >
+                      Add Education
+                    </button>
+                  </div>
                 </div>
               ))}
-              <button
-                type="button"
-                className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-[#1a237e] hover:text-[#1a237e] transition-colors"
-                onClick={() => setResumeData({
-                  ...resumeData,
-                  education: [...resumeData.education, { degree: '', university: '', year: '' }]
-                })}
-              >
-                + Add Education
-              </button>
             </div>
 
-            {/* Skills Section - Moved here */}
+            {/* Photo Upload Section */}
+            {doesTemplateSupportPhoto() && (
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-gray-900">Profile Photo (Optional)</h2>
+                {!resumeData.photo ? (
+                  <div className="flex items-center justify-center">
+                    <label
+                      htmlFor="photo-upload"
+                      className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-500 transition-colors cursor-pointer text-center"
+                    >
+                      {photoUploading ? (
+                        <span>Uploading...</span>
+                      ) : (
+                        <span>Click to upload profile photo (JPG, PNG, max 5MB)</span>
+                      )}
+                    </label>
+                    <input
+                      id="photo-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                      disabled={photoUploading}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-4">
+                    <img
+                      src={resumeData.photo}
+                      alt="Profile"
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-600">Profile photo uploaded successfully</p>
+                      <button
+                        type="button"
+                        onClick={removePhoto}
+                        className="text-sm text-red-600 hover:text-red-800 transition-colors"
+                      >
+                        Remove Photo
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Skills */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900">Skills</h2>
               <div className="flex flex-wrap gap-2">
                 {resumeData.skills.map((skill, index) => (
                   <span
                     key={index}
-                    className="px-3 py-1 bg-[#1a237e]/10 text-[#1a237e] rounded-full text-sm flex items-center"
+                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center"
                   >
                     {skill}
                     <button
                       type="button"
-                      className="ml-2 text-[#1a237e] hover:text-[#1a237e]/70"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        removeSkill(skill);
-                      }}
+                      className="ml-2 text-blue-600 hover:text-blue-800"
+                      onClick={() => removeSkill(skill)}
                     >
                       ×
                     </button>
@@ -913,55 +1140,48 @@ const ResumeEditor = () => {
               <div className="flex space-x-2">
                 <input
                   type="text"
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
-                  placeholder="Type a skill and press Enter"
+                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Add Skill"
                   value={skillInput}
                   onChange={handleSkillInputChange}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && skillInput.trim()) {
                       e.preventDefault();
                       addSkill(skillInput.trim());
-                      setSkillInput('');
                     }
                   }}
                 />
                 <button
                   type="button"
-                  className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90 flex items-center space-x-2"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleAIEnhanceSkills();
-                  }}
-                  disabled={suggestedSkills.includes('Loading...')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                  onClick={() => addSkill(skillInput.trim())}
+                  disabled={!skillInput.trim()}
                 >
-                  {suggestedSkills.includes('Loading...') ? (
-                    <>
-                      <span className="animate-spin">↻</span>
-                      <span>Loading...</span>
-                    </>
-                  ) : (
-                    'Enhance Skills with AI'
-                  )}
+                  <span>Add</span>
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                  onClick={handleAIEnhanceSkills}
+                >
+                  <span>✨</span>
+                  <span>AI Enhance</span>
                 </button>
               </div>
-              {/* Display AI Suggested Skills */}
-              {suggestedSkills.length > 0 && !suggestedSkills.includes('Loading...') && (
-                <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">AI Suggested Skills:</h3>
+
+              {/* Suggested Skills */}
+              {suggestedSkills.length > 0 && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Suggested Skills:</h3>
                   <div className="flex flex-wrap gap-2">
                     {suggestedSkills.map((skill, index) => {
-                      // Clean the skill string by removing numbers, periods, and special characters
-                      const cleanedSkill = skill
-                        .replace(/^\d+\.\s*/, '') // Remove numbers and periods from start
-                        .replace(/[\[\]"']/g, '') // Remove quotes and brackets
-                        .trim();
+                      const cleanedSkill = skill.replace(/[•\-*]/g, '').trim();
                       
                       return (
                         <button
                           key={index}
                           type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
+                          onClick={() => {
                             addSkill(cleanedSkill);
                             setSuggestedSkills(prev => prev.filter(s => s !== skill));
                           }}
@@ -977,19 +1197,19 @@ const ResumeEditor = () => {
               )}
             </div>
 
-            {/* Certifications Section - Moved here */}
+            {/* Certifications Section */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900">Certifications</h2>
               <div className="flex flex-wrap gap-2">
                 {resumeData.certifications.map((cert, index) => (
                   <span
                     key={index}
-                    className="px-3 py-1 bg-[#1a237e]/10 text-[#1a237e] rounded-full text-sm flex items-center"
+                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center"
                   >
                     {cert}
                     <button
                       type="button"
-                      className="ml-2 text-[#1a237e] hover:text-[#1a237e]/70"
+                      className="ml-2 text-blue-600 hover:text-blue-800"
                       onClick={(e) => {
                         e.preventDefault();
                         setResumeData(prev => ({
@@ -1006,7 +1226,7 @@ const ResumeEditor = () => {
               <div className="flex space-x-2">
                 <input
                   type="text"
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Add Certification"
                   value={certInput}
                   onChange={(e) => setCertInput(e.target.value)}
@@ -1025,7 +1245,7 @@ const ResumeEditor = () => {
                 />
                 <button
                   type="button"
-                  className="px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   onClick={(e) => {
                     e.preventDefault();
                     if (certInput.trim() && !resumeData.certifications.includes(certInput.trim())) {
@@ -1057,7 +1277,7 @@ const ResumeEditor = () => {
                   </ul>
                 </div>
                 <textarea
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows="4"
                   placeholder="Write a brief professional summary (2-5 lines)..."
                   value={resumeData.summary}
@@ -1066,7 +1286,7 @@ const ResumeEditor = () => {
                 />
                 <button
                   type="button"
-                  className="absolute bottom-3 right-3 px-4 py-2 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90 text-sm flex items-center space-x-2"
+                  className="absolute bottom-3 right-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2"
                   onClick={handleAISummary}
                 >
                   <span>✨</span>
@@ -1079,11 +1299,12 @@ const ResumeEditor = () => {
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900">References</h2>
               <textarea
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a237e] focus:border-transparent"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 rows="4"
                 placeholder="Include references here (if any)"
                 value={resumeData.references}
                 onChange={handleChange}
+                name="references"
               />
             </div>
 
@@ -1091,7 +1312,7 @@ const ResumeEditor = () => {
             <div className="pt-6">
               <button
                 type="submit"
-                className="w-full p-4 bg-[#1a237e] text-white rounded-lg hover:bg-[#1a237e]/90 font-medium text-lg shadow-lg hover:shadow-xl transition-all"
+                className="w-full p-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-lg shadow-lg hover:shadow-xl transition-all"
               >
                 Generate Resume
               </button>
@@ -1108,12 +1329,12 @@ const ResumeEditor = () => {
               <span className="text-gray-700">ATS Compliance:</span>
               <div className="flex-1 bg-gray-200 rounded-full h-2">
                 <div 
-                  className={`${getScoreColor(atsScore)} rounded-full h-2 transition-all duration-300`} 
-                  style={{ width: `${atsScore}%` }}
+                  className={`${getScoreColor(atsScore || 0)} rounded-full h-2 transition-all duration-300`} 
+                  style={{ width: `${atsScore || 0}%` }}
                 />
               </div>
               <div className="flex items-center space-x-2">
-                <span className={`font-medium ${atsScore >= 60 ? 'text-green-600' : 'text-orange-600'}`}>{atsScore}%</span>
+                <span className={`font-medium ${(atsScore || 0) >= 60 ? 'text-green-600' : 'text-orange-600'}`}>{atsScore || 0}%</span>
                 {isCalculatingATS && (
                   <span className="text-sm text-gray-500">
                     Calculating...
@@ -1121,12 +1342,12 @@ const ResumeEditor = () => {
                 )}
               </div>
             </div>
-            <p className={`text-sm ${atsScore >= 60 ? 'text-green-600' : 'text-orange-600'}`}>
-              {getScoreMessage(atsScore)}
+            <p className={`text-sm ${(atsScore || 0) >= 60 ? 'text-green-600' : 'text-orange-600'}`}>
+              {getScoreMessage(atsScore || 0)}
             </p>
 
             {/* Quick Tips Based on Score */}
-            {atsScore < 80 && (
+            {(atsScore || 0) < 80 && (
               <div className="mt-4 bg-blue-50 p-4 rounded-lg">
                 <h3 className="font-medium text-blue-900 mb-2">Quick Tips to Improve:</h3>
                 <ul className="text-sm text-blue-800 space-y-1">
@@ -1149,13 +1370,14 @@ const ResumeEditor = () => {
         </div>
       </div>
 
-      {/* Add saving indicator */}
-      {isSaving && (
-        <div className="fixed bottom-4 right-4 bg-green-100 text-green-800 px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
-          <span className="animate-spin">↻</span>
-          <span>Saving changes...</span>
-        </div>
-      )}
+        {/* Add saving indicator */}
+        {isSaving && (
+          <div className="fixed bottom-4 right-4 bg-green-100 text-green-800 px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
+            <span className="animate-spin">↻</span>
+            <span>Saving changes...</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

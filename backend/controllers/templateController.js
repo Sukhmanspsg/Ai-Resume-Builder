@@ -62,10 +62,12 @@ exports.deleteTemplate = (req, res) => {
 exports.renderResumeTemplate = async (req, res) => {
   const templateId = req.params.id;
   const resumeId = req.query.resumeId;
+  const primaryColor = req.query.primaryColor || '#1A237E';
 
-  console.log("🔍 Rendering template:", templateId, "| Resume ID:", resumeId);
+  console.log("🔍 Rendering template:", templateId, "| Resume ID:", resumeId, "| Color:", primaryColor);
 
   try {
+    // Get template data
     const template = await new Promise((resolve, reject) => {
       templateModel.getTemplateById(templateId, (err, result) => {
         if (err) return reject(err);
@@ -73,53 +75,58 @@ exports.renderResumeTemplate = async (req, res) => {
       });
     });
 
-    if (!template) return res.status(404).json({ message: 'Template not found' });
+    if (!template) {
+      console.log("❌ Template not found:", templateId);
+      return res.status(404).json({ message: 'Template not found' });
+    }
 
-    let feedbackJson;
+    console.log("✅ Template found:", template.name);
 
-    const feedback = await new Promise((resolve, reject) => {
-      Feedback.getLatestByResumeId(resumeId, (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      });
-    });
-
-    if (feedback?.message) {
-      feedbackJson = JSON.parse(feedback.message);
-    } else {
-      const resumeModel = require('../models/resumeModel');
-      const resume = await new Promise((resolve, reject) => {
-        resumeModel.getResumeById(resumeId, (err, result) => {
-          if (err) return reject(err);
-          resolve(result?.[0] || null);
-        });
-      });
-
-      if (!resume) {
-        console.warn("⚠️ Resume not found, rendering fallback");
-        const renderedHTML = injectTemplate(template.html_code, {});
-        return res.status(200).send(renderedHTML);
-      }
-
+    // Get resume data
+    let resumeData = {};
+    if (resumeId) {
       try {
-        feedbackJson = JSON.parse(resume.content);
-      } catch (err) {
-        console.error("❌ Failed to parse resume JSON:", err);
-        return res.status(400).json({ message: 'Invalid resume JSON format' });
+        const resumeModel = require('../models/resumeModel');
+        const resume = await new Promise((resolve, reject) => {
+          resumeModel.getResumeById(resumeId, (err, result) => {
+            if (err) return reject(err);
+            resolve(result?.[0] || null);
+          });
+        });
+
+        if (resume && resume.content) {
+          try {
+            resumeData = JSON.parse(resume.content);
+            console.log("✅ Resume data loaded successfully", {
+              hasPhoto: !!resumeData.photo,
+              photoLength: resumeData.photo?.length,
+              name: resumeData.name
+            });
+          } catch (parseErr) {
+            console.warn("⚠️ Failed to parse resume JSON, using empty data");
+            resumeData = {};
+          }
+        } else {
+          console.warn("⚠️ Resume not found, using empty data");
+        }
+      } catch (resumeErr) {
+        console.warn("⚠️ Failed to fetch resume, using empty data:", resumeErr.message);
       }
     }
 
+    // Render template with resume data
     let renderedHTML;
     try {
-      renderedHTML = injectTemplate(template.html_code, feedbackJson);
-    } catch (err) {
-      console.error("❌ injectTemplate failed:", err);
-      return res.status(500).json({ message: 'Template injection failed', error: err.message });
+      renderedHTML = injectTemplate(template.html_code, resumeData, primaryColor);
+      console.log("✅ Template rendered successfully, length:", renderedHTML.length);
+    } catch (injectErr) {
+      console.error("❌ Template injection failed:", injectErr.message);
+      return res.status(500).json({ message: 'Template injection failed', error: injectErr.message });
     }
 
     return res.status(200).send(renderedHTML);
   } catch (err) {
-    console.error("🔥 Unexpected server error:", err.stack || err);
+    console.error("🔥 Unexpected server error:", err.message);
     return res.status(500).json({ message: 'Server error', error: err.message });
   }
 };

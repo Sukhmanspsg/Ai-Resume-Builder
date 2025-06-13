@@ -79,7 +79,7 @@ const FeedbackPopup = ({ isOpen, onClose, onSuccess }) => {
               </svg>
             </button>
           </div>
-          <p className="text-blue-100 mt-2">Your feedback helps us improve our resume builder</p>
+                          <p className="text-blue-100 mt-2">Your feedback helps us improve ResumePro</p>
         </div>
 
         {/* Content */}

@@ -65,7 +65,7 @@ const FeedbackForm = ({ resumeId, onSubmitSuccess }) => {
       <textarea
         className="w-full p-2 border rounded-md mb-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         rows="3"
-        placeholder="Share your thoughts about the resume builder..."
+                        placeholder="Share your thoughts about ResumePro..."
         value={comment}
         onChange={(e) => setComment(e.target.value)}
       />

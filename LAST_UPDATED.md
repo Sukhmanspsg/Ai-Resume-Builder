@@ -1,4 +1,4 @@
-# AI Resume Builder - Last Updated
+# ResumePro - Last Updated
 
 **Last Updated:** January 1, 2025 ⏰
 

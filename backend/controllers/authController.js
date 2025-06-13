@@ -119,8 +119,8 @@ exports.register = async (req, res) => {
     try {
       // Generate MFA secret
       const secret = speakeasy.generateSecret({
-        name: `AI Resume Builder (${email})`,
-        issuer: 'AI Resume Builder'
+        name: `ResumePro (${email})`,
+        issuer: 'ResumePro'
       });
 
       // Generate QR code

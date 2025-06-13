@@ -76,7 +76,16 @@ const MyResumes = () => {
   // Navigate to preview page
   const handlePreview = (resume) => {
     const resumeData = JSON.parse(resume.content);
-    navigate('/preview', { state: resumeData });
+    navigate('/resume-preview', { 
+      state: {
+        ...resumeData,
+        id: resume.id,
+        title: resume.title,
+        selectedTemplate: 1, // Default template ID
+        selectedColor: '#1A237E', // Default color
+        useDatabase: true // Use database templates
+      }
+    });
   };
 
   // Helper function to safely render complex data

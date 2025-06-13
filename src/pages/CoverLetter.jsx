@@ -318,7 +318,14 @@ ${cleanedLetter}`;
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold">AI Cover Letter Generator</h1>
             <button
-              onClick={() => navigate('/resume-preview', { state: resumeData })}
+              onClick={() => navigate('/resume-preview', { 
+                state: {
+                  ...resumeData,
+                  selectedTemplate: 1, // Default template ID
+                  selectedColor: '#1A237E', // Default color
+                  useDatabase: true // Use database templates
+                }
+              })}
               className="px-4 py-2 bg-white text-[#1a237e] rounded hover:bg-gray-100 transition-colors"
             >
               Back to Resume

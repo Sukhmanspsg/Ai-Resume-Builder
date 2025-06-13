@@ -16,7 +16,19 @@ const DefaultTemplate = ({ resume, primaryColor = '#1A237E' }) => {
     <div className="p-8 max-w-4xl mx-auto">
       {/* Header */}
       <div className="text-center mb-8">
+        {/* Photo and Name Section */}
+        <div className="flex flex-col items-center mb-4">
+          {resumeData.photo && (
+            <img
+              src={resumeData.photo}
+              alt="Profile"
+              className="w-32 h-32 rounded-full object-cover border-4 border-gray-200 mb-4 shadow-lg"
+            />
+          )}
         <h1 className="text-4xl font-bold mb-2">{resumeData.name || 'Your Name'}</h1>
+        </div>
+        
+        {/* Contact Information */}
         <div className="text-gray-600 space-x-2">
           <span>{resumeData.email || 'your.email@example.com'}</span>
           <span>|</span>

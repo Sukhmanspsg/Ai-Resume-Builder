@@ -33,7 +33,9 @@ const TemplateGallery = () => {
     navigate('/resume-preview', { 
       state: { 
         ...resumeData,
-        selectedTemplate: templateId 
+        selectedTemplate: templateId,
+        selectedColor: '#1A237E', // Default color
+        useDatabase: false // Use React components instead of database templates
       } 
     });
   };
@@ -78,7 +80,14 @@ const TemplateGallery = () => {
         {/* Action Buttons */}
         <div className="flex justify-center space-x-4">
           <button
-            onClick={() => navigate('/resume-preview', { state: resumeData })}
+            onClick={() => navigate('/resume-preview', { 
+              state: {
+                ...resumeData,
+                selectedTemplate: 1, // Default template ID
+                selectedColor: '#1A237E', // Default color
+                useDatabase: true // Use database templates
+              }
+            })}
             className="bg-gray-800 text-white py-2 px-6 rounded hover:bg-gray-700 transition-colors"
           >
             Back to Preview

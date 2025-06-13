@@ -21,7 +21,19 @@ const ModernTemplate = ({ resume, primaryColor = '#1A237E' }) => {
       {/* Header Section with gradient background */}
       <div className="p-8 text-white" style={gradientStyle}>
         <div className="text-center">
+          {/* Photo and Name Section */}
+          <div className="flex flex-col items-center mb-4">
+            {resumeData.photo && (
+              <img
+                src={resumeData.photo}
+                alt="Profile"
+                className="w-32 h-32 rounded-full object-cover border-4 border-white mb-4 shadow-lg"
+              />
+            )}
           <h1 className="text-4xl font-bold mb-4">{resumeData.name || 'Your Name'}</h1>
+          </div>
+          
+          {/* Contact Information */}
           <div className="flex justify-center items-center space-x-4 text-sm">
             <span>{resumeData.email || 'your.email@example.com'}</span>
             <span>•</span>

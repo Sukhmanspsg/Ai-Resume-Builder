@@ -16,7 +16,12 @@ const MinimalTemplate = ({ resume, primaryColor = '#1A237E' }) => {
     <div className="max-w-4xl mx-auto bg-white p-8">
       {/* Header */}
       <div className="text-center mb-12">
+        {/* Name Section (no photo for minimal template) */}
+        <div className="flex flex-col items-center mb-6">
         <h1 className="text-5xl font-light mb-4" style={headerStyle}>{resumeData.name || 'Your Name'}</h1>
+        </div>
+        
+        {/* Contact Information */}
         <div className="flex justify-center items-center space-x-4 text-gray-600">
           <span>{resumeData.email || 'your.email@example.com'}</span>
           <span>•</span>

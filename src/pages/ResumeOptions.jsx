@@ -83,7 +83,7 @@ const ResumeOptions = () => {
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-3">Create Resume from Scratch</h2>
               <p className="text-gray-600">
-                Start fresh with our guided resume builder and AI assistance.
+                Start fresh with our guided ResumePro editor and AI assistance.
               </p>
               <div className="mt-4 flex items-center text-[#1a237e] group-hover:translate-x-2 transition-transform duration-300">
                 <span className="font-medium">Get Started</span>

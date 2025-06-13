@@ -21,8 +21,8 @@ const setupMFA = async (req, res) => {
 
     // Generate a secret key
     const secret = speakeasy.generateSecret({
-      name: 'AI Resume Builder',
-      issuer: 'AI Resume Builder'
+      name: 'ResumePro',
+      issuer: 'ResumePro'
     });
 
     // Generate QR code

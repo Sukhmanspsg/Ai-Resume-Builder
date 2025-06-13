@@ -13,6 +13,13 @@ console.log("Loaded resumeController:", resumeController);
 router.post('/', verifyToken, resumeController.createResume);
 
 // ===============================================
+// @route   POST /api/resumes/temporary
+// @desc    Create a temporary resume (no auth required)
+// @access  Public
+// ===============================================
+router.post('/temporary', resumeController.createResume);
+
+// ===============================================
 // @route   GET /api/resumes/user/:userId
 // @desc    Get all resumes for a user
 // @access  Private
