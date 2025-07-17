@@ -1,13 +1,17 @@
 import axios from 'axios';
 
+// API base URL - will use environment variable in production
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true,
 });
 
-// Add a request interceptor to include the auth token
+// Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -21,17 +25,13 @@ api.interceptors.request.use(
   }
 );
 
-// Add a response interceptor to handle common errors
+// Response interceptor to handle auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('API Error:', error.response?.data || error.message);
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      // Redirect to login if not already there
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
