@@ -3,7 +3,6 @@ services:
   - type: web
     name: resumepro-backend
     env: node
-    plan: free
     buildCommand: cd backend && npm install
     startCommand: cd backend && npm start
     envVars:
@@ -30,7 +29,6 @@ services:
   - type: web
     name: resumepro-frontend
     env: static
-    plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: ./build
     envVars:
